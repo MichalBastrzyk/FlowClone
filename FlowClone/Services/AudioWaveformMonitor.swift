@@ -39,6 +39,9 @@ final class AudioWaveformMonitor {
     private var realOut = [Float](repeating: 0, count: Constants.bufferSize)
     private var imagOut = [Float](repeating: 0, count: Constants.bufferSize)
     private var fftMagnitudes = [Float](repeating: 0, count: Constants.sampleAmount)
+    
+    // Serial queue for FFT processing to prevent race conditions
+    private let processingQueue = DispatchQueue(label: "com.michalbastrzyk.FlowClone.audioProcessing", qos: .userInteractive)
 
     // MARK: - Init
 
@@ -69,6 +72,9 @@ final class AudioWaveformMonitor {
 
     // MARK: - Monitoring Control
 
+    /// Start monitoring audio waveform.
+    /// Note: This is intentionally synchronous (not async) as it only sets a flag.
+    /// The actual audio processing happens asynchronously in processBuffer().
     func startMonitoring() {
         guard !isMonitoring else { return }
         Logger.shared.info("Audio waveform monitoring started")
@@ -88,10 +94,14 @@ final class AudioWaveformMonitor {
     func processBuffer(_ buffer: AVAudioPCMBuffer) {
         guard isMonitoring else { return }
 
-        let newMagnitudes = performFFT(data: buffer)
+        // Process FFT on serial queue to prevent concurrent access to FFT buffers
+        processingQueue.async { [weak self] in
+            guard let self = self else { return }
+            let newMagnitudes = self.performFFT(data: buffer)
 
-        Task { @MainActor in
-            self.magnitudes = newMagnitudes
+            Task { @MainActor in
+                self.magnitudes = newMagnitudes
+            }
         }
     }
 

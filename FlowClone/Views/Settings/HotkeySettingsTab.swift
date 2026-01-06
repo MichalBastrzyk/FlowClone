@@ -94,6 +94,10 @@ struct HotkeySettingsTab: View {
             loadHotkeySettings()
             setupHotkeyMonitoring()
         }
+        .onDisappear {
+            // Clean up the closure to prevent memory leak
+            HotkeyService.shared.onModifiersChanged = nil
+        }
     }
 
     private func modifierKeyBadge(_ name: String, isPressed: Bool) -> some View {

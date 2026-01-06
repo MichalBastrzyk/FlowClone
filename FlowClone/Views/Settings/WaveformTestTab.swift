@@ -124,10 +124,16 @@ struct WaveformTestTab: View {
         .scrollContentBackground(.hidden)
         .background(Color(nsColor: .windowBackgroundColor))
         .onDisappear {
-            // Stop monitoring when leaving the tab
+            // Stop monitoring when leaving the tab, but keep toggle state
+            // so user can see their last choice when returning
             if useRealAudio {
-                useRealAudio = false
                 AudioWaveformMonitor.shared.stopMonitoring()
+            }
+        }
+        .onAppear {
+            // Resume monitoring if toggle is still on when returning to tab
+            if useRealAudio {
+                AudioWaveformMonitor.shared.startMonitoring()
             }
         }
     }
