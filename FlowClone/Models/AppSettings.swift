@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AppKit
 import Observation
 
 @Observable
@@ -70,9 +71,8 @@ final class AppSettings {
 
         // Load fallback hotkey if saved
         if let keyCode = UserDefaults.standard.object(forKey: Keys.hotkeyFallbackKeyCode) as? Int,
-           let modifiersRaw = UserDefaults.standard.object(forKey: Keys.hotkeyFallbackModifiers) as? UInt,
-           let modifiers = NSEvent.ModifierFlags(rawValue: modifiersRaw) {
-            self.fallbackHotkey = HotkeyConfig(keyCode: keyCode, modifiers: modifiers)
+           let modifiersRaw = UserDefaults.standard.object(forKey: Keys.hotkeyFallbackModifiers) as? UInt {
+            self.fallbackHotkey = HotkeyConfig(keyCode: keyCode, modifiers: NSEvent.ModifierFlags(rawValue: modifiersRaw))
         } else {
             self.fallbackHotkey = nil
         }
@@ -128,14 +128,23 @@ enum LanguageMode: String, CaseIterable {
 
 struct HotkeyConfig: Equatable, Codable {
     let keyCode: Int
-    let modifiers: NSEvent.ModifierFlags
+    let modifiersRawValue: UInt
+
+    var modifiers: NSEvent.ModifierFlags {
+        NSEvent.ModifierFlags(rawValue: modifiersRawValue)
+    }
+
+    init(keyCode: Int, modifiers: NSEvent.ModifierFlags) {
+        self.keyCode = keyCode
+        self.modifiersRawValue = modifiers.rawValue
+    }
 
     var displayName: String {
         let modifierString: String
         if modifiers.isEmpty {
             modifierString = ""
         } else {
-            let parts: [String] = []
+            var parts: [String] = []
             if modifiers.contains(.command) { parts.append("⌘") }
             if modifiers.contains(.option) { parts.append("⌥") }
             if modifiers.contains(.control) { parts.append("⌃") }

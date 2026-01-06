@@ -88,13 +88,13 @@ final class AudioCaptureService {
     func stopRecording() async throws -> URL {
         Logger.shared.info("Stopping audio recording...")
 
-        guard let audioEngine = audioEngine else {
+        guard let engine = audioEngine else {
             throw AudioCaptureError.noActiveRecording
         }
 
         // Stop engine
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        engine.inputNode.removeTap(onBus: 0)
 
         // Close file
         audioFile?.close()

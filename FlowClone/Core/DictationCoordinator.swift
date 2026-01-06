@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AppKit
 
 @Observable
 final class DictationCoordinator {

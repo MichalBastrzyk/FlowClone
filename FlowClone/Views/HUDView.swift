@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct HUDView: View {
     let state: DictationState

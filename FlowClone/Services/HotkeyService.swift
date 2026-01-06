@@ -7,6 +7,7 @@
 
 import Foundation
 import ApplicationServices
+import AppKit
 
 final class HotkeyService {
     static let shared = HotkeyService()

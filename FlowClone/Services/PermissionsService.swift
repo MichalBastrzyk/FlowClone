@@ -8,6 +8,7 @@
 import Foundation
 import AVFoundation
 import ApplicationServices
+import AppKit
 import Observation
 
 @Observable
@@ -16,17 +17,11 @@ final class PermissionsService {
 
     // MARK: - Published Properties
 
-    private(set) var microphonePermissionStatus: PermissionStatus = .notDetermined {
-        willSet { objectWillChange() }
-    }
+    private(set) var microphonePermissionStatus: PermissionStatus = .notDetermined
 
-    private(set) var accessibilityPermissionStatus: PermissionStatus = .notDetermined {
-        willSet { objectWillChange() }
-    }
+    private(set) var accessibilityPermissionStatus: PermissionStatus = .notDetermined
 
-    private(set) var inputMonitoringPermissionStatus: PermissionStatus = .notDetermined {
-        willSet { objectWillChange() }
-    }
+    private(set) var inputMonitoringPermissionStatus: PermissionStatus = .notDetermined
 
     var hasAllPermissions: Bool {
         microphonePermissionStatus == .granted &&
@@ -118,14 +113,15 @@ final class PermissionsService {
             place: .headInsertEventTap,
             options: .defaultTap,
             eventsOfInterest: CGEventMask(1 << CGEventType.flagsChanged.rawValue),
-            callback: { _, _, _, _ in Unmanaged.passUnretained(nil).toOpaque() },
+            callback: { proxy, type, event, refcon in
+                return Unmanaged.passRetained(event)
+            },
             userInfo: nil
         )
 
         if let tap = tap {
             inputMonitoringPermissionStatus = .granted
             CGEvent.tapEnable(tap: tap, enable: false)
-            CFRelease(tap)
         } else {
             inputMonitoringPermissionStatus = .denied
         }

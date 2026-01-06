@@ -39,8 +39,9 @@ final class HUDWindow: NSWindow {
 }
 
 final class HUDWindowController: NSWindowController {
-    private let hostingView: NSHostingView<HUDView>
+    private var hostingView: NSHostingView<HUDView>!
     private let stateMachine: DictationStateMachine
+    private var updateTimer: Timer?
 
     init(stateMachine: DictationStateMachine) {
         self.stateMachine = stateMachine
@@ -58,30 +59,49 @@ final class HUDWindowController: NSWindowController {
 
         super.init(window: window)
 
-        // Observe state changes
-        stateMachine.$state
-            .receive(on: RunLoop.main)
-            .sink { [weak self] state in
-                self?.updateHUD(for: state)
-            }
-            .store(in: &cancellables)
+        // Poll for state changes
+        startUpdating()
     }
 
-    private var cancellables = Set<AnyCancellable>()
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
-    private func updateHUD(for state: DictationState) {
+    private func startUpdating() {
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            self?.updateHUDIfNeeded()
+        }
+    }
+
+    private func updateHUDIfNeeded() {
         guard let window = window else { return }
 
-        switch state {
-        case .idle:
-            window.orderOut(nil)
-        case .arming, .recording, .stopping, .transcribing, .injecting, .error:
+        let currentView = hostingView.rootView
+        let newState = stateMachine.state
+        let newSession = stateMachine.currentSession
+
+        // Only update if state changed
+        if needsUpdate(currentView: currentView, newState: newState, newSession: newSession) {
             hostingView.rootView = HUDView(
-                state: state,
-                session: stateMachine.currentSession
+                state: newState,
+                session: newSession
             )
-            window.orderFrontRegardless()
+
+            switch newState {
+            case .idle:
+                window.orderOut(nil)
+            case .arming, .recording, .stopping, .transcribing, .injecting, .error:
+                window.orderFrontRegardless()
+            }
         }
+    }
+
+    private func needsUpdate(currentView: HUDView, newState: DictationState, newSession: RecordingSession?) -> Bool {
+        currentView.state != newState || currentView.session != newSession
+    }
+
+    deinit {
+        updateTimer?.invalidate()
     }
 
     func show() {

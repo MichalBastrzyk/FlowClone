@@ -13,14 +13,7 @@ final class DictationStateMachine {
 
     private(set) var state: DictationState = .idle {
         willSet {
-            Logger.shared.stateTransition(
-                from: stateDescription,
-                to: DictationStateMachine.stateDescription(for: newValue),
-                event: lastEvent ?? "unknown"
-            )
-        }
-        didSet {
-            objectWillChange()
+            Logger.shared.info("[State] \(stateDescription) -> \(DictationStateMachine.stateDescription(for: newValue)) (event: \(lastEvent ?? "unknown"))")
         }
     }
 
@@ -126,12 +119,16 @@ final class DictationStateMachine {
 
         // Permissions changed
         case (.idle, .permissionsChanged),
-             (.arming, .permissionsChanged),
-             (.error(let message, let recoverable), .permissionsChanged):
+             (.arming, .permissionsChanged):
             if !permissions.canRecordAudio {
                 transitionToError("Microphone permission required", recoverable: true)
-            } else if case .error = state {
+            }
+
+        case (.error, .permissionsChanged):
+            if permissions.canRecordAudio {
                 transitionToIdle()
+            } else {
+                transitionToError("Microphone permission required", recoverable: true)
             }
 
         default:

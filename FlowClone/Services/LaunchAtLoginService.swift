@@ -12,13 +12,7 @@ import ServiceManagement
 final class LaunchAtLoginService {
     static let shared = LaunchAtLoginService()
 
-    private(set) var isEnabled: Bool {
-        didSet {
-            Task { @MainActor in
-                objectWillChange()
-            }
-        }
-    }
+    private(set) var isEnabled: Bool
 
     private init() {
         self.isEnabled = SMAppService.mainApp.status == .enabled

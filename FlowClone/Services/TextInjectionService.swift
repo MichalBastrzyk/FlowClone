@@ -8,6 +8,7 @@
 import Foundation
 import Cocoa
 import ApplicationServices
+import Carbon
 
 final class TextInjectionService {
     static let shared = TextInjectionService()
@@ -71,15 +72,18 @@ final class TextInjectionService {
 
         // Get current keyboard layout
         let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
-        let layoutData = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData)
+        let layoutProperty = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData)
 
-        guard let layoutDataRaw = layoutData else {
+        guard let layoutDataRaw = layoutProperty else {
             Logger.shared.error("Could not get keyboard layout")
             throw TextInjectionError.keyboardLayoutNotFound
         }
 
         let layoutData = unsafeBitCast(layoutDataRaw, to: CFData.self)
-        let layoutPtr = CFDataGetBytePtr(layoutData)
+        guard let layoutPtr = CFDataGetBytePtr(layoutData) else {
+            Logger.shared.error("Could not get layout data pointer")
+            throw TextInjectionError.keyboardLayoutNotFound
+        }
 
         var lastChar: Character?
         var keyPressDelay: UInt64 = 10_000_000 // 10ms between keystrokes
@@ -124,7 +128,7 @@ final class TextInjectionService {
     // MARK: - Key Synthesis
 
     private func synthesizeKeyCode(_ keyCode: CGKeyCode, withModifiers: NSEvent.ModifierFlags) async {
-        let flags = CGEventFlags(mask: (modifiersToCGFlags(withModifiers)))
+        let flags = modifiersToCGFlags(withModifiers)
 
         // Key down
         if let eventDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) {
