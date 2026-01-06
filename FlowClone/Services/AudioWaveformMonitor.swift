@@ -17,10 +17,12 @@ final class AudioWaveformMonitor {
     // MARK: - Configuration
 
     private enum Constants {
-        static let sampleAmount: Int = 20 // Match our 20 bars
+        static let sampleAmount: Int = 32 // Number of bars to render
         static let bufferSize: Int = 2048 // Power of 2 for FFT
         static let magnitudeLimit: Float = 100.0
     }
+
+    static let barCount: Int = Constants.sampleAmount
 
     // MARK: - Published Properties
 
@@ -156,7 +158,7 @@ final class AudioWaveformMonitor {
             imagp: &imagOut
         )
 
-        // Compute magnitudes for our sample count
+        // Compute magnitudes for our sample count (first N frequency bins)
         vDSP_zvabs(
             &complex,
             1,

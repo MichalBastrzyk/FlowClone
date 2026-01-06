@@ -9,6 +9,8 @@ import SwiftUI
 import Combine
 
 struct SettingsView: View {
+    private let barCount = AudioWaveformMonitor.barCount
+
     @State private var settings = AppSettings()
     @State private var permissions = PermissionsService.shared
     @State private var launchAtLogin = LaunchAtLoginService.shared
@@ -23,13 +25,13 @@ struct SettingsView: View {
     @State private var selectedHotkeyModifiers: Set<ModifierOption> = []
 
     // Waveform test state
-    @State private var magnitudes = [Float](repeating: 0, count: 20)
+    @State private var magnitudes = [Float](repeating: 0, count: AudioWaveformMonitor.barCount)
     @State private var testMagnitude: Float = 0.0
     @State private var useRealAudio: Bool = false
     private let audioTimer = Timer.publish(every: 0.016, on: .main, in: .common).autoconnect() // ~60fps
 
     var currentMagnitudes: [Float] {
-        useRealAudio ? magnitudes : Array(repeating: testMagnitude, count: 20)
+        useRealAudio ? magnitudes : Array(repeating: testMagnitude, count: barCount)
     }
 
     var body: some View {
@@ -258,22 +260,31 @@ struct SettingsView: View {
         Form {
             Section("Waveform Visualization") {
                 VStack(spacing: 20) {
-                    // Waveform preview
-                    HStack(spacing: 3) {
-                        ForEach(0..<20, id: \.self) { i in
-                            let magnitude = i < currentMagnitudes.count ? currentMagnitudes[i] : 0
-                            WaveBar(
-                                index: i,
-                                magnitude: magnitude,
-                                isRecording: true
-                            )
+                    // Waveform preview - matches actual recording pill
+                    HStack(spacing: 0) {
+                        HStack(spacing: 3) {
+                            ForEach(0..<barCount, id: \.self) { i in
+                                let magnitude = i < currentMagnitudes.count ? currentMagnitudes[i] : 0
+                                WaveBar(
+                                    index: i,
+                                    magnitude: magnitude,
+                                    isRecording: true
+                                )
+                            }
                         }
+                        .frame(height: 32, alignment: .center) // Center vertically
+                        .padding(.leading, 20) // Left padding inside pill
+                        .padding(.trailing, 20) // Right padding inside pill
                     }
-                    .frame(height: 32)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, 0) // No extra horizontal padding
+                    .padding(.vertical, 14)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.gray.opacity(0.1))
+                        Capsule()
+                            .fill(Color.black)
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                            )
                     )
 
                     // Magnitude display

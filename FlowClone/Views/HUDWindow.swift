@@ -64,10 +64,12 @@ final class HUDWindowController: NSWindowController {
         )
 
         self.hostingView = NSHostingView(rootView: hudView)
+        self.hostingView.autoresizingMask = [.width, .height]
 
         let window = HUDWindow()
         window.contentViewController = NSViewController()
         window.contentViewController?.view = hostingView
+        hostingView.frame = window.contentView?.bounds ?? .zero
 
         super.init(window: window)
 

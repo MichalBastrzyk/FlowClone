@@ -11,10 +11,11 @@ import Combine
 struct HUDView: View {
     let state: DictationState
     let session: RecordingSession?
+    private let barCount = AudioWaveformMonitor.barCount
 
     @State private var recordingDuration: TimeInterval = 0
     @State private var isVisible = false
-    @State private var magnitudes = [Float](repeating: 0, count: 20)
+    @State private var magnitudes = [Float](repeating: 0, count: AudioWaveformMonitor.barCount)
     private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
 
     private var shouldShow: Bool {
@@ -27,17 +28,14 @@ struct HUDView: View {
     }
 
     var body: some View {
-        HStack {
-            Spacer()
-            Group {
-                if shouldShow {
-                    content
-                        .opacity(isVisible ? 1 : 0)
-                        .scaleEffect(isVisible ? 1 : 0.92)
-                        .blur(radius: isVisible ? 0 : 3)
-                }
+        GeometryReader { geometry in
+            ZStack {
+                content
+                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                    .opacity(isVisible ? 1 : 0)
+                    .scaleEffect(isVisible ? 1 : 0.92)
+                    .blur(radius: isVisible ? 0 : 3)
             }
-            Spacer()
         }
         .onChange(of: shouldShow) { _, newValue in
             withAnimation(.easeOut(duration: 0.15)) {
@@ -56,6 +54,7 @@ struct HUDView: View {
                 magnitudes = AudioWaveformMonitor.shared.magnitudes
             }
         }
+        .frame(width: 400, height: 100)
     }
 
     @ViewBuilder
@@ -73,9 +72,9 @@ struct HUDView: View {
     // MARK: - Recording Pill
     private var recordingPill: some View {
         HStack(spacing: 0) {
-            // Reactive waveform bars - centered vertically
+            // Reactive waveform bars - centered vertically and offset right
             HStack(spacing: 3) {
-                ForEach(0..<20, id: \.self) { i in
+                ForEach(0..<barCount, id: \.self) { i in
                     WaveBar(
                         index: i,
                         magnitude: i < magnitudes.count ? magnitudes[i] : 0,
@@ -83,18 +82,11 @@ struct HUDView: View {
                     )
                 }
             }
-            .frame(height: 32, alignment: .center) // Taller container for better centering
-            .padding(.vertical, 0) // Remove padding to ensure true center
-
-            Spacer().frame(width: 16)
-
-            // Timer - also centered
-            Text(formattedDuration)
-                .font(.system(size: 13, weight: .medium, design: .monospaced))
-                .foregroundColor(.white.opacity(0.9))
-                .frame(height: 32, alignment: .center) // Match waveform height
+            .frame(height: 32, alignment: .center) // Center vertically
+            .padding(.leading, 20) // Left padding inside pill
+            .padding(.trailing, 20) // Right padding inside pill
         }
-        .padding(.horizontal, 20)
+        .padding(.horizontal, 0) // No extra horizontal padding
         .padding(.vertical, 14)
         .background(
             Capsule()
@@ -153,13 +145,13 @@ struct WaveBar: View {
 
     private var baseHeight: CGFloat {
         // Varied heights for visual interest in silence
-        let pattern: [CGFloat] = [6, 8, 10, 12, 9, 11, 7, 13, 10, 8, 12, 9, 14, 10, 7, 11, 9, 12, 8, 6]
+        let pattern: [CGFloat] = [6, 8, 10, 12, 9, 11, 7, 13, 10, 8, 12, 9, 14, 10, 7, 11, 9, 12, 8, 6, 13, 9, 11, 10, 12, 8, 10, 14, 9, 11, 7, 12]
         return pattern[index % pattern.count]
     }
 
     private var maxHeight: CGFloat {
         // Maximum height varies by position
-        let pattern: [CGFloat] = [14, 18, 22, 26, 16, 20, 15, 28, 20, 16, 22, 18, 30, 22, 15, 20, 18, 24, 18, 14]
+        let pattern: [CGFloat] = [14, 18, 22, 26, 16, 20, 15, 28, 20, 16, 22, 18, 30, 22, 15, 20, 18, 24, 18, 14, 26, 19, 23, 21, 25, 17, 22, 30, 19, 24, 16, 23]
         return pattern[index % pattern.count]
     }
 
@@ -192,9 +184,30 @@ struct WaveBar: View {
             .ignoresSafeArea()
 
         VStack(spacing: 40) {
-            HUDView(
-                state: .recording(session: RecordingSession(tempFileURL: URL(fileURLWithPath: "/tmp/test"))),
-                session: nil
+            // Recording pill with no timer
+            HStack(spacing: 0) {
+                HStack(spacing: 3) {
+                    ForEach(0..<AudioWaveformMonitor.barCount, id: \.self) { i in
+                        WaveBar(
+                            index: i,
+                            magnitude: 0.3,
+                            isRecording: true
+                        )
+                    }
+                }
+                .frame(height: 32, alignment: .center)
+                .padding(.leading, 20)
+                .padding(.trailing, 20)
+            }
+            .padding(.horizontal, 0)
+            .padding(.vertical, 14)
+            .background(
+                Capsule()
+                    .fill(Color.black)
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                    )
             )
 
             HUDView(state: .error(message: "Microphone access required", recoverable: true), session: nil)
