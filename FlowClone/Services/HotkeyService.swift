@@ -38,8 +38,25 @@ final class HotkeyService {
     // MARK: - Setup
 
     private func setupEventTap() {
+        Logger.shared.info("[HotkeyService] Setting up event tap...")
+
+        // Check permissions first
+        let permissions = PermissionsService.shared
+        permissions.refreshInputMonitoringPermission()
+
+        Logger.shared.info("[HotkeyService] Input Monitoring permission: \(permissions.inputMonitoringPermissionStatus)")
+        Logger.shared.info("[HotkeyService] Accessibility permission: \(permissions.accessibilityPermissionStatus)")
+
+        if permissions.inputMonitoringPermissionStatus != .granted && permissions.accessibilityPermissionStatus != .granted {
+            Logger.shared.error("[HotkeyService] ❌ Cannot create event tap - neither Input Monitoring nor Accessibility permission granted")
+            Logger.shared.error("[HotkeyService] Please grant permissions in System Settings > Privacy & Security")
+            return
+        }
+
         // Create event tap for key events
         let eventMask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue) | (1 << CGEventType.flagsChanged.rawValue)
+
+        Logger.shared.debug("[HotkeyService] Creating event tap with mask: \(eventMask)")
 
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -56,7 +73,8 @@ final class HotkeyService {
             },
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            Logger.shared.error("Failed to create event tap - permissions may be denied")
+            Logger.shared.error("[HotkeyService] ❌ Failed to create event tap - permissions denied or system error")
+            Logger.shared.error("[HotkeyService] Try granting 'Input Monitoring' permission in System Settings")
             return
         }
 
@@ -68,7 +86,9 @@ final class HotkeyService {
         self.runLoopSource = runLoopSource
         CGEvent.tapEnable(tap: tap, enable: true)
 
-        Logger.shared.info("Event tap created successfully")
+        Logger.shared.info("[HotkeyService] ✅ Event tap created successfully")
+        Logger.shared.info("[HotkeyService] Listening for Fn/Globe key (code 63) or fallback hotkey")
+        Logger.shared.info("[HotkeyService] Try pressing your hotkey now...")
     }
 
     func stopMonitoring() {
@@ -120,13 +140,15 @@ final class HotkeyService {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags
 
+        Logger.shared.debug("[HotkeyService] Key DOWN: keyCode=\(keyCode), flags=\(flags.rawValue)")
+
         // Check for fallback hotkey
         if let config = fallbackHotkey,
            keyCode == config.keyCode &&
            flagsMatches(flags: flags, modifiers: config.modifiers) {
             if !isHotkeyDown {
                 isHotkeyDown = true
-                Logger.shared.debug("Hotkey DOWN (fallback)")
+                Logger.shared.info("[HotkeyService] 🔥 HOTKEY DOWN (fallback: \(config.displayName))")
                 onHotkeyDown?(Date())
             }
             return
@@ -135,7 +157,7 @@ final class HotkeyService {
         // Check for Fn/Globe key
         if keyCode == fnKeyCode && !isHotkeyDown {
             isHotkeyDown = true
-            Logger.shared.debug("Hotkey DOWN (Fn/Globe)")
+            Logger.shared.info("[HotkeyService] 🔥 HOTKEY DOWN (Fn/Globe key detected!)")
             onHotkeyDown?(Date())
         }
     }
@@ -144,13 +166,15 @@ final class HotkeyService {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags
 
+        Logger.shared.debug("[HotkeyService] Key UP: keyCode=\(keyCode), flags=\(flags.rawValue)")
+
         // Check for fallback hotkey
         if let config = fallbackHotkey,
            keyCode == config.keyCode &&
            flagsMatches(flags: flags, modifiers: config.modifiers) {
             if isHotkeyDown {
                 isHotkeyDown = false
-                Logger.shared.debug("Hotkey UP (fallback)")
+                Logger.shared.info("[HotkeyService] 🎹 HOTKEY UP (fallback: \(config.displayName))")
                 onHotkeyUp?(Date())
             }
             return
@@ -159,7 +183,7 @@ final class HotkeyService {
         // Check for Fn/Globe key
         if keyCode == fnKeyCode && isHotkeyDown {
             isHotkeyDown = false
-            Logger.shared.debug("Hotkey UP (Fn/Globe)")
+            Logger.shared.info("[HotkeyService] 🎹 HOTKEY UP (Fn/Globe key)")
             onHotkeyUp?(Date())
         }
     }

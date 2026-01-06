@@ -221,6 +221,29 @@ struct SettingsView: View {
 
             Divider()
 
+            // Hotkey testing section
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Hotkey Test")
+                    .font(.headline)
+                Text("Press any key to test if it's detected:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Text("Try: Fn key, Cmd+Shift+Space, or other keys")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                Text("Open Console.app to see key detection logs")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .background(Color.gray.opacity(0.1))
+            .cornerRadius(8)
+
+            Divider()
+
             Text("Hold your hotkey to record, release to transcribe")
                 .font(.caption)
                 .foregroundColor(.secondary)

@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 @main
 struct FlowCloneApp: App {
@@ -23,18 +24,44 @@ struct FlowCloneApp: App {
                 NSApplication.shared.terminate(nil)
             }
         } label: {
-            Image(systemName: iconName)
+            MenuBarIcon()
         }
     }
+}
 
-    private var iconName: String {
-        switch DictationCoordinator.shared.stateMachine.state {
+struct MenuBarIcon: View {
+    @State private var state: DictationState = .idle
+    private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Image(systemName: iconName(for: state))
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .foregroundColor(iconColor(for: state))
+            .onReceive(timer) { _ in
+                state = DictationCoordinator.shared.stateMachine.state
+            }
+    }
+
+    private func iconName(for state: DictationState) -> String {
+        switch state {
         case .idle: return "waveform"
         case .arming: return "hand.raised.fill"
         case .recording: return "circle.fill"
         case .stopping, .transcribing: return "waveform.path"
         case .injecting: return "keyboard"
         case .error: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private func iconColor(for state: DictationState) -> Color {
+        switch state {
+        case .idle: return .primary
+        case .arming: return .orange
+        case .recording: return .red
+        case .stopping, .transcribing: return .blue
+        case .injecting: return .green
+        case .error: return .red
         }
     }
 }
