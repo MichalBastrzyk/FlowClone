@@ -1,184 +1,152 @@
 # FlowClone
 
-A macOS menu bar app that records while a hotkey is held, transcribes via Groq Whisper, then injects the text into the currently focused input.
+**Free, open-source alternative to WhisperFlow.**
+
+A minimalist macOS dictation app that transcribes your voice to text—anywhere, anytime. Just hold a key, speak, and your words appear.
+
+## Why FlowClone?
+
+- **100% Free & Open Source** — No subscriptions, no hidden costs
+- **Bring Your Own Keys** — Use your own Groq API key (free tier available!)
+- **Privacy-First** — Audio deleted by default, nothing stored on our servers
+- **Lightning Fast** — Powered by Groq's Whisper API (~1-2s transcription)
+- **Works Everywhere** — Dictate into any app: Slack, VS Code, Notes, you name it
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- macOS 14.0+
+- A free [Groq API key](https://console.groq.com/keys) (sign up, it's free!)
+
+### Installation
+
+```bash
+git clone https://github.com/michalbstrzyk/FlowClone.git
+cd FlowClone
+open FlowClone.xcodeproj
+```
+
+1. Select your **Development Team** in Xcode signing settings
+2. Build & run (⌘R)
+
+### First Run
+
+1. **Grant Microphone Access** when prompted
+2. **Paste your Groq API key** in Settings → General
+3. **Enable Accessibility** in Settings → Permissions (required for hotkeys & text injection)
+
+That's it! You're ready to dictate.
+
+---
+
+## How It Works
+
+1. Place cursor in any text field
+2. Hold **Fn/Globe** (or your custom hotkey)
+3. Speak
+4. Release
+5. Text appears automatically ✨
+
+---
 
 ## Features
 
-- **Hold-to-Record**: Hold your hotkey to record, release to transcribe
-- **Fast Transcription**: Powered by Groq's Whisper API
-- **Multiple Injection Modes**: Paste mode (faster) or Type mode (more compatible)
-- **Menu Bar App**: Lives in your menu bar, out of the way
-- **Privacy First**: Audio files are deleted by default after transcription
-- **Launch at Login**: Optional auto-start on system boot
+| Feature | Description |
+|---------|-------------|
+| **Hold-to-Record** | Hold key to record, release to transcribe |
+| **Smart Injection** | Paste mode (fast) or Type mode (compatible) |
+| **Visual Feedback** | Real-time waveform visualization while recording |
+| **Auto-Delete** | Temp audio files removed after transcription |
+| **Launch at Login** | Start automatically with your Mac |
+| **Multiple Languages** | Auto-detect or pick from 50+ languages |
 
-## Requirements
+---
 
-- macOS 14.0+
-- Xcode 16.0+ (for building)
-- Groq API key (get one free at [console.groq.com](https://console.groq.com))
+## Configuration
 
-## Building
+### Hotkey
 
-1. Open `FlowClone.xcodeproj` in Xcode
-2. Select your development team in the Signing & Capabilities tab
-3. Build and run (⌘R)
+Default: **Fn/Globe** key (hold to record)
 
-## First Time Setup
+Fallback: Set a custom combo in Settings (e.g., ⌘⇧Space)
 
-### 1. Grant Microphone Permission
+### Text Injection
 
-When you first launch FlowClone, you'll be prompted to grant microphone access. This is required for recording audio.
+**Paste Mode** (default)
+- Faster (~200ms)
+- Simulates ⌘V
+- Requires clipboard access
 
-### 2. Set Your Groq API Key
+**Type Mode**
+- Slower but more compatible
+- Simulates keystrokes
+- Works in clipboard-restricted apps
 
-1. Click the FlowClone menu bar icon
-2. Select "Settings..."
-3. Go to the "General" tab
-4. Enter your Groq API key and click "Save API Key"
+### Transcription
 
-Get your API key at [console.groq.com](https://console.groq.com/keys).
+Choose speed vs accuracy:
+- **Fast** (whisper-large-v3-turbo) — ~1s
+- **Accurate** (whisper-large-v3) — ~2s
 
-### 3. Grant Accessibility/Input Monitoring Permissions
-
-FlowClone needs special permissions to:
-- Use global hotkeys
-- Inject text into other applications
-
-Open the "Permissions" tab in Settings and click "Open Settings" for:
-- **Accessibility** (preferred, enables both hotkey and text injection)
-- **Input Monitoring** (alternative, enables only hotkey)
-
-### 4. Configure Your Hotkey
-
-By default, FlowClone attempts to use the Fn/Globe key. If that doesn't work on your system, you can set a fallback hotkey in Settings.
-
-## Usage
-
-### Basic Dictation
-
-1. Place your cursor in any text field
-2. Hold your hotkey (Fn/Globe or your configured fallback)
-3. Speak clearly
-4. Release the hotkey
-5. Your transcribed text will appear!
-
-### Settings Options
-
-**Transcription Settings:**
-- **Model**: Choose between Fast (whisper-large-v3-turbo) or Accurate (whisper-large-v3)
-- **Language**: Auto-detect or specify a language
-
-**Text Injection:**
-- **Paste Mode** (default): Uses clipboard paste - faster but requires clipboard access
-- **Type Mode**: Simulates keystrokes - slower but works in more apps
-
-**Other:**
-- **Delete temp audio**: Automatically delete recordings after transcription
-- **Launch at login**: Start FlowClone automatically on system boot
-
-## Project Structure
-
-```
-FlowClone/
-├── Models/                  # Data models
-│   ├── AppSettings.swift
-│   ├── DictationState.swift
-│   └── RecordingSession.swift
-├── Services/                # Service layer
-│   ├── AudioCaptureService.swift
-│   ├── HotkeyService.swift
-│   ├── KeychainService.swift
-│   ├── LaunchAtLoginService.swift
-│   ├── Logger.swift
-│   ├── PermissionsService.swift
-│   ├── TextInjectionService.swift
-│   └── TranscriptionService.swift
-├── Core/                    # State machine and coordinator
-│   ├── DictationCoordinator.swift
-│   └── DictationStateMachine.swift
-├── Views/                   # UI components
-│   ├── HUDView.swift
-│   ├── HUDWindow.swift
-│   ├── MenuBarView.swift
-│   └── SettingsView.swift
-└── FlowCloneApp.swift       # App entry point
-```
-
-## Architecture
-
-FlowClone uses a state machine architecture with a coordinator pattern:
-
-- **DictationStateMachine**: Manages state transitions (idle → arming → recording → transcribing → injecting)
-- **DictationCoordinator**: Orchestrates all services and handles hotkey events
-- **Services**: Isolated components for each concern (audio, transcription, injection, etc.)
-
-### State Machine
-
-```
-idle → arming → recording → stopping → transcribing → injecting → idle
-  ↓                                                         ↓
-error (auto-recovery) ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ←
-```
+---
 
 ## Troubleshooting
 
-### Hotkey Not Working
+**Hotkey not working?**
+→ Set a fallback key in Settings → General
 
-If your Fn/Globe key doesn't trigger recording:
-1. Go to Settings → General
-2. Set a fallback hotkey (e.g., Cmd+Shift+Space)
+**Text not appearing?**
+→ Switch to "Type" mode in Settings → General
 
-### Text Not Appearing
+**Transcription failed?**
+→ Check your API key in Settings → General
 
-If transcription succeeds but text doesn't appear:
-1. Try switching to "Type" mode in Settings
-2. Make sure you've granted Accessibility permission
-3. Check that the target app is focused
+**Permission errors?**
+→ Grant Accessibility in System Settings → Privacy & Security
 
-### Transcription Errors
+---
 
-If you get transcription errors:
-1. Verify your Groq API key is valid in Settings
-2. Check your internet connection
-3. Try the "Accurate" model for better results
+## Architecture
 
-### Permission Issues
+FlowClone is built with a state machine architecture:
 
-If the app shows permission warnings:
-1. Open System Settings > Privacy & Security
-2. Grant the required permissions
-3. Restart FlowClone
+- **DictationStateMachine** — Single source of truth for app state
+- **Service Layer** — Isolated components (audio, transcription, injection)
+- **Coordinator Pattern** — Clean separation of concerns
 
-## Development
+```
+idle → arming → recording → stopping → transcribing → injecting → idle
+```
 
-### Adding New Features
+---
 
-1. **New Settings**: Add to `AppSettings.swift` and update `SettingsView.swift`
-2. **New States**: Add to `DictationState.swift` and update transitions in `DictationStateMachine.swift`
-3. **New Services**: Create in `Services/` and inject into `DictationCoordinator`
+## Contributing
 
-### Logging
+Contributions welcome! Please feel free to submit issues or pull requests.
 
-FlowClone uses the unified logging system. View logs in Console.app:
+### Development Setup
 
 ```bash
+# View logs
 log stream --predicate 'subsystem == "com.michalbastrzyk.FlowClone"' --level debug
 ```
 
-### Diagnostics
+See [CLAUDE.md](CLAUDE.md) for architecture documentation.
 
-To copy diagnostic information:
-1. Click the FlowClone menu bar icon
-2. Select "Settings..."
-3. Go to the "About" tab
-4. Click "Copy Diagnostics"
+---
 
 ## License
 
-MIT License - Feel free to use and modify as needed.
+[MIT](LICENSE) — Free to use, modify, and distribute.
 
-## Credits
+---
 
-- Built with SwiftUI and AppKit
+## Acknowledgments
+
+- Built with **SwiftUI** and **AppKit**
 - Transcription powered by [Groq](https://groq.com)
-- Uses OpenAI's Whisper model via Groq API
+- Uses OpenAI's **Whisper** model via Groq API
+- Inspired by [WhisperFlow](https://whisperflow.app)
