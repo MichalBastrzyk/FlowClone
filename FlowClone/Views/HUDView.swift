@@ -143,14 +143,10 @@ struct WaveBar: View {
 
     @State private var currentHeight: CGFloat = 8
 
-    private var baseHeight: CGFloat {
-        // Varied heights for visual interest in silence
-        let pattern: [CGFloat] = [6, 8, 10, 12, 9, 11, 7, 13, 10, 8, 12, 9, 14, 10, 7, 11, 9, 12, 8, 6, 13, 9, 11, 10, 12, 8, 10, 14, 9, 11, 7, 12]
-        return pattern[index % pattern.count]
-    }
+    private var minHeight: CGFloat { 4 } // Flat baseline when silent
 
     private var maxHeight: CGFloat {
-        // Maximum height varies by position
+        // Maximum height varies by position for visual interest
         let pattern: [CGFloat] = [14, 18, 22, 26, 16, 20, 15, 28, 20, 16, 22, 18, 30, 22, 15, 20, 18, 24, 18, 14, 26, 19, 23, 21, 25, 17, 22, 30, 19, 24, 16, 23]
         return pattern[index % pattern.count]
     }
@@ -160,14 +156,14 @@ struct WaveBar: View {
             .fill(Color.white.opacity(0.85))
             .frame(width: 3, height: currentHeight)
             .onAppear {
-                currentHeight = baseHeight
+                currentHeight = minHeight
             }
             .onChange(of: magnitude) { _, newMagnitude in
                 guard isRecording else { return }
 
-                // Calculate height based on FFT magnitude
-                let audioHeight = CGFloat(newMagnitude) * (maxHeight - baseHeight)
-                let targetHeight = baseHeight + audioHeight
+                // Calculate height based on FFT magnitude (flat at 0, grows with sound)
+                let audioHeight = CGFloat(newMagnitude) * (maxHeight - minHeight)
+                let targetHeight = minHeight + audioHeight
 
                 // Smooth animation
                 withAnimation(.easeOut(duration: 0.08)) {
