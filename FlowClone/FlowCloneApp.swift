@@ -30,17 +30,14 @@ struct FlowCloneApp: App {
 }
 
 struct MenuBarIcon: View {
-    @State private var state: DictationState = .idle
-    private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+    // Observe the state machine directly via @Observable
+    private var stateMachine: DictationStateMachine { DictationCoordinator.shared.stateMachine }
 
     var body: some View {
-        Image(systemName: iconName(for: state))
+        Image(systemName: iconName(for: stateMachine.state))
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .foregroundColor(iconColor(for: state))
-            .onReceive(timer) { _ in
-                state = DictationCoordinator.shared.stateMachine.state
-            }
+            .foregroundColor(iconColor(for: stateMachine.state))
     }
 
     private func iconName(for state: DictationState) -> String {
@@ -69,7 +66,8 @@ struct MenuBarIcon: View {
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    static let shared = AppDelegate()
+    /// The actual app delegate instance set by the system
+    private(set) static var shared: AppDelegate!
 
     private var hudWindowController: HUDWindowController?
     private var settingsWindow: NSWindow?
@@ -93,6 +91,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Set the shared reference to this actual instance
+        AppDelegate.shared = self
+
         // Don't show dock icon or menu bar
         NSApp.setActivationPolicy(.accessory)
 

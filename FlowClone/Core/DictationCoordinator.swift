@@ -21,7 +21,7 @@ final class DictationCoordinator {
 
     // MARK: - Dependencies
 
-    private let settings = AppSettings()
+    private let settings = AppSettings.shared
     private let permissions = PermissionsService.shared
     private let audioCapture = AudioCaptureService.shared
     private let transcription = TranscriptionService.shared
@@ -111,22 +111,11 @@ final class DictationCoordinator {
     }
 
     private func setupDictationCompleteObserver() {
-        // Observe state changes for successful dictation completion
-        Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-
-            // Check if we just completed dictation successfully
-            // We detect this by checking if previous state was .injecting and now is .idle
-            if self.previousStateWasInjecting && self.stateMachine.state == .idle {
-                self.playSuccessSound()
-                self.previousStateWasInjecting = false
-            } else if case .injecting = self.stateMachine.state {
-                self.previousStateWasInjecting = true
-            }
+        // Success sound is now played via the state machine's onDictationComplete callback
+        stateMachine.onDictationComplete = { [weak self] in
+            self?.playSuccessSound()
         }
     }
-
-    private var previousStateWasInjecting: Bool = false
 
     private func playSuccessSound() {
         // Play a satisfying system sound

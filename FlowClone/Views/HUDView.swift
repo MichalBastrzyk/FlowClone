@@ -13,10 +13,12 @@ struct HUDView: View {
     let session: RecordingSession?
     private let barCount = AudioWaveformMonitor.barCount
 
+    // Observe the waveform monitor directly - it's @Observable
+    private var waveformMonitor: AudioWaveformMonitor { AudioWaveformMonitor.shared }
+
     @State private var recordingDuration: TimeInterval = 0
     @State private var isVisible = false
-    @State private var magnitudes = [Float](repeating: 0, count: AudioWaveformMonitor.barCount)
-    private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+    private let durationTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
 
     private var shouldShow: Bool {
         switch state {
@@ -49,11 +51,6 @@ struct HUDView: View {
                 }
             }
         }
-        .onReceive(timer) { _ in
-            if case .recording = state {
-                magnitudes = AudioWaveformMonitor.shared.magnitudes
-            }
-        }
         .frame(width: 400, height: 100)
     }
 
@@ -75,6 +72,7 @@ struct HUDView: View {
             // Reactive waveform bars - centered vertically and offset right
             HStack(spacing: 3) {
                 ForEach(0..<barCount, id: \.self) { i in
+                    let magnitudes = waveformMonitor.magnitudes
                     WaveBar(
                         index: i,
                         magnitude: i < magnitudes.count ? magnitudes[i] : 0,
@@ -96,7 +94,7 @@ struct HUDView: View {
                         .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
                 )
         )
-        .onReceive(timer) { _ in
+        .onReceive(durationTimer) { _ in
             if case .recording(let session) = state {
                 recordingDuration = Date().timeIntervalSince(session.startedAt)
             }

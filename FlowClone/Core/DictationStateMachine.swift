@@ -44,6 +44,11 @@ final class DictationStateMachine {
     private var armingTimer: Timer?
     private var maxDurationTimer: Timer?
 
+    // MARK: - Callbacks
+
+    /// Called when dictation completes successfully (after injection)
+    var onDictationComplete: (() -> Void)?
+
     // MARK: - Constants
 
     private let armingDebounceInterval: TimeInterval = 0.065 // 65ms
@@ -107,7 +112,7 @@ final class DictationStateMachine {
 
         // INJECTING state
         case (.injecting, .injectionSucceeded):
-            transitionToIdle()
+            transitionToIdle(fromSuccessfulInjection: true)
 
         case (.injecting, .injectionFailed(let message)):
             transitionToError(message, recoverable: true)
@@ -138,9 +143,13 @@ final class DictationStateMachine {
 
     // MARK: - Transitions
 
-    private func transitionToIdle() {
+    private func transitionToIdle(fromSuccessfulInjection: Bool = false) {
         state = .idle
         cancelAllTimers()
+
+        if fromSuccessfulInjection {
+            onDictationComplete?()
+        }
     }
 
     private func transitionToArming(startedAt: Date) {

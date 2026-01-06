@@ -47,30 +47,30 @@ final class TranscriptionService {
             throw TranscriptionError.fileReadFailed
         }
 
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"recording.m4a\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/m4a\r\n\r\n".data(using: .utf8)!)
+        body.appendString("--\(boundary)\r\n")
+        body.appendString("Content-Disposition: form-data; name=\"file\"; filename=\"recording.m4a\"\r\n")
+        body.appendString("Content-Type: audio/m4a\r\n\r\n")
         body.append(fileData)
-        body.append("\r\n".data(using: .utf8)!)
+        body.appendString("\r\n")
 
         // Add model
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(model.rawValue)\r\n".data(using: .utf8)!)
+        body.appendString("--\(boundary)\r\n")
+        body.appendString("Content-Disposition: form-data; name=\"model\"\r\n\r\n")
+        body.appendString("\(model.rawValue)\r\n")
 
         // Add language (if not auto)
         if language != .auto {
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
-            body.append("\(language.rawValue)\r\n".data(using: .utf8)!)
+            body.appendString("--\(boundary)\r\n")
+            body.appendString("Content-Disposition: form-data; name=\"language\"\r\n\r\n")
+            body.appendString("\(language.rawValue)\r\n")
         }
 
         // Add response format
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"response_format\"\r\n\r\n".data(using: .utf8)!)
-        body.append("json\r\n".data(using: .utf8)!)
+        body.appendString("--\(boundary)\r\n")
+        body.appendString("Content-Disposition: form-data; name=\"response_format\"\r\n\r\n")
+        body.appendString("json\r\n")
 
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        body.appendString("--\(boundary)--\r\n")
 
         request.httpBody = body
 
@@ -150,6 +150,17 @@ enum TranscriptionError: LocalizedError {
             return "The Groq service may be unavailable. Please try again later"
         default:
             return nil
+        }
+    }
+}
+
+// MARK: - Data Extension for Safe String Appending
+
+private extension Data {
+    /// Appends a string to data using UTF-8 encoding. Safe alternative to force unwrapping.
+    mutating func appendString(_ string: String) {
+        if let data = string.data(using: .utf8) {
+            append(data)
         }
     }
 }

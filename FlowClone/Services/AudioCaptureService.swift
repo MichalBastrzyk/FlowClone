@@ -16,14 +16,7 @@ final class AudioCaptureService {
     private var audioEngine: AVAudioEngine?
     private var audioFile: AVAudioFile?
     private var tempFileURL: URL?
-    private let sessionID = UUID()
-
-    // MARK: - Real-time Audio Level
-
-    /// Current audio level (0.0 to 1.0), updated in real-time during recording
-    private(set) var currentAudioLevel: Double = 0.0
-
-    private var currentLevel: Double = 0.0
+    private var currentSessionID: UUID?
 
     private init() {}
 
@@ -38,8 +31,12 @@ final class AudioCaptureService {
             throw AudioCaptureError.microphoneNotAuthorized
         }
 
+        // Generate new session ID for this recording
+        let sessionID = UUID()
+        currentSessionID = sessionID
+
         // Start waveform monitor
-        await AudioWaveformMonitor.shared.startMonitoring()
+        AudioWaveformMonitor.shared.startMonitoring()
 
         // Create temp file
         let tempDir = FileManager.default.temporaryDirectory
@@ -84,9 +81,8 @@ final class AudioCaptureService {
                 Logger.shared.error("Failed to write audio buffer: \(error.localizedDescription)")
             }
 
-            // Calculate and update audio level for visualization
-            let level = self.calculateAudioLevel(from: buffer)
-            self.updateAudioLevel(level)
+            // Feed buffer to waveform monitor for visualization
+            AudioWaveformMonitor.shared.processBuffer(buffer)
         }
 
         // Start engine
@@ -112,8 +108,9 @@ final class AudioCaptureService {
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)
 
-        // Close file
-        audioFile?.close()
+        // AVAudioFile automatically flushes when deallocated
+        // Just nil out the reference
+        audioFile = nil
 
         guard let fileURL = tempFileURL else {
             throw AudioCaptureError.noActiveRecording
@@ -123,12 +120,9 @@ final class AudioCaptureService {
 
         // Cleanup
         audioEngine = nil
-        audioFile = nil
         let finalURL = tempFileURL
         tempFileURL = nil
-
-        // Reset audio level for visualization
-        resetAudioLevel()
+        currentSessionID = nil
 
         // Stop waveform monitor
         AudioWaveformMonitor.shared.stopMonitoring()
@@ -164,50 +158,6 @@ final class AudioCaptureService {
         } catch {
             Logger.shared.error("Failed to cleanup temp files: \(error.localizedDescription)")
         }
-    }
-
-    // MARK: - Audio Level Calculation
-
-    private func calculateAudioLevel(from buffer: AVAudioPCMBuffer) -> Double {
-        guard let channelData = buffer.floatChannelData?[0] else {
-            return 0.0
-        }
-
-        let frameLength = Int(buffer.frameLength)
-        guard frameLength > 0 else {
-            return 0.0
-        }
-
-        // Calculate RMS (root mean square) for accurate amplitude
-        var sum: Double = 0.0
-        for i in 0..<frameLength {
-            let sample = Double(channelData[i])
-            sum += sample * sample
-        }
-        let rms = sqrt(sum / Double(frameLength))
-
-        // Apply logarithmic scaling for better dynamic range
-        // This matches human hearing perception better
-        let logarithmicLevel = log10(1.0 + rms * 9.0) // Maps 0-1 to 0-1 logarithmically
-
-        return logarithmicLevel
-    }
-
-    private func updateAudioLevel(_ newLevel: Double) {
-        // Apply more aggressive smoothing for less jittery animation
-        // Increased smoothingFactor from 0.3 to 0.15 for smoother visuals
-        let smoothed = (newLevel * 0.2) + (currentLevel * 0.8)
-        currentLevel = smoothed
-
-        // Update on main thread for UI reactivity
-        Task { @MainActor in
-            currentAudioLevel = smoothed
-        }
-    }
-
-    func resetAudioLevel() {
-        currentLevel = 0.0
-        currentAudioLevel = 0.0
     }
 }
 

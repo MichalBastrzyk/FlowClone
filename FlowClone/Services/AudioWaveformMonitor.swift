@@ -10,6 +10,8 @@ import AVFoundation
 import Accelerate
 import Observation
 
+/// Processes audio buffers for waveform visualization.
+/// This class does NOT own an AVAudioEngine - it receives buffers from AudioCaptureService.
 @Observable
 final class AudioWaveformMonitor {
     static let shared = AudioWaveformMonitor()
@@ -27,88 +29,75 @@ final class AudioWaveformMonitor {
     // MARK: - Published Properties
 
     var magnitudes = [Float](repeating: 0, count: Constants.sampleAmount)
-    var isMonitoring = false
+    private(set) var isMonitoring = false
 
-    // MARK: - Dependencies
+    // MARK: - FFT Resources (pre-allocated for performance)
 
-    private var audioEngine = AVAudioEngine()
     private var fftSetup: OpaquePointer?
+    private var realIn = [Float](repeating: 0, count: Constants.bufferSize)
+    private var imagIn = [Float](repeating: 0, count: Constants.bufferSize)
+    private var realOut = [Float](repeating: 0, count: Constants.bufferSize)
+    private var imagOut = [Float](repeating: 0, count: Constants.bufferSize)
+    private var fftMagnitudes = [Float](repeating: 0, count: Constants.sampleAmount)
 
     // MARK: - Init
 
-    private init() {}
-
-    deinit {
-        stopMonitoring()
+    private init() {
+        setupFFT()
     }
 
-    // MARK: - Monitoring Control
+    deinit {
+        teardownFFT()
+    }
 
-    func startMonitoring() async {
-        Logger.shared.info("Starting audio waveform monitoring...")
+    // MARK: - FFT Setup
 
-        let inputNode = audioEngine.inputNode
-        let inputFormat = inputNode.inputFormat(forBus: 0)
-
-        // Set up FFT
+    private func setupFFT() {
         fftSetup = vDSP_DFT_zop_CreateSetup(
             nil,
             UInt(Constants.bufferSize),
             .FORWARD
         )
-
-        // Install tap on input node
-        inputNode.installTap(
-            onBus: 0,
-            bufferSize: UInt32(Constants.bufferSize),
-            format: inputFormat
-        ) { [weak self] buffer, _ in
-            guard let self = self else { return }
-
-            Task { @MainActor in
-                let newMagnitudes = await self.performFFT(data: buffer)
-                self.magnitudes = newMagnitudes
-            }
-        }
-
-        // Start engine
-        do {
-            try audioEngine.start()
-            await MainActor.run {
-                self.isMonitoring = true
-            }
-            Logger.shared.info("Audio waveform monitoring started")
-        } catch {
-            Logger.shared.error("Failed to start audio engine: \(error.localizedDescription)")
-        }
     }
 
-    func stopMonitoring() {
-        guard isMonitoring else { return }
-
-        Logger.shared.info("Stopping audio waveform monitoring...")
-
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
-
-        // Clear magnitudes
-        Task { @MainActor in
-            self.magnitudes = [Float](repeating: 0, count: Constants.sampleAmount)
-            self.isMonitoring = false
-        }
-
-        // Release FFT setup
+    private func teardownFFT() {
         if let setup = fftSetup {
             vDSP_DFT_DestroySetup(setup)
             fftSetup = nil
         }
+    }
 
+    // MARK: - Monitoring Control
+
+    func startMonitoring() {
+        guard !isMonitoring else { return }
+        Logger.shared.info("Audio waveform monitoring started")
+        isMonitoring = true
+    }
+
+    func stopMonitoring() {
+        guard isMonitoring else { return }
         Logger.shared.info("Audio waveform monitoring stopped")
+        isMonitoring = false
+        magnitudes = [Float](repeating: 0, count: Constants.sampleAmount)
+    }
+
+    // MARK: - Buffer Processing (called by AudioCaptureService)
+
+    /// Process an audio buffer and update magnitudes. Called from AudioCaptureService's tap.
+    func processBuffer(_ buffer: AVAudioPCMBuffer) {
+        guard isMonitoring else { return }
+
+        let newMagnitudes = performFFT(data: buffer)
+
+        Task { @MainActor in
+            self.magnitudes = newMagnitudes
+        }
     }
 
     // MARK: - FFT Processing
 
-    private func performFFT(data: AVAudioPCMBuffer) async -> [Float] {
+    private func performFFT(data: AVAudioPCMBuffer) -> [Float] {
         guard let setup = fftSetup else {
             return [Float](repeating: 0, count: Constants.sampleAmount)
         }
@@ -119,9 +108,9 @@ final class AudioWaveformMonitor {
 
         let frameCount = Int(data.frameLength)
 
-        // Prepare input data
-        var realIn = [Float](repeating: 0, count: Constants.bufferSize)
-        var imagIn = [Float](repeating: 0, count: Constants.bufferSize)
+        // Reset input arrays
+        realIn = [Float](repeating: 0, count: Constants.bufferSize)
+        imagIn = [Float](repeating: 0, count: Constants.bufferSize)
 
         // Copy available data (up to buffer size)
         let copyCount = min(frameCount, Constants.bufferSize)
@@ -129,9 +118,9 @@ final class AudioWaveformMonitor {
             realIn[i] = channelData[i]
         }
 
-        // Prepare output arrays
-        var realOut = [Float](repeating: 0, count: Constants.bufferSize)
-        var imagOut = [Float](repeating: 0, count: Constants.bufferSize)
+        // Reset output arrays
+        realOut = [Float](repeating: 0, count: Constants.bufferSize)
+        imagOut = [Float](repeating: 0, count: Constants.bufferSize)
 
         // Execute FFT
         realIn.withUnsafeMutableBufferPointer { realInPtr in
@@ -151,7 +140,7 @@ final class AudioWaveformMonitor {
         }
 
         // Calculate magnitudes
-        var magnitudes = [Float](repeating: 0, count: Constants.sampleAmount)
+        fftMagnitudes = [Float](repeating: 0, count: Constants.sampleAmount)
 
         var complex = DSPSplitComplex(
             realp: &realOut,
@@ -162,17 +151,15 @@ final class AudioWaveformMonitor {
         vDSP_zvabs(
             &complex,
             1,
-            &magnitudes,
+            &fftMagnitudes,
             1,
             UInt(Constants.sampleAmount)
         )
 
         // Apply logarithmic scaling for better dynamic range
-        let scaledMagnitudes = magnitudes.map { magnitude in
+        return fftMagnitudes.map { magnitude in
             let logMagnitude = log10(1.0 + magnitude * 10.0)
             return min(logMagnitude, 1.0)
         }
-
-        return scaledMagnitudes
     }
 }
