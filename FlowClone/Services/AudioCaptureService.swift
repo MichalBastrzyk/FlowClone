@@ -7,7 +7,9 @@
 
 import Foundation
 import AVFoundation
+import Observation
 
+@Observable
 final class AudioCaptureService {
     static let shared = AudioCaptureService()
 
@@ -15,6 +17,13 @@ final class AudioCaptureService {
     private var audioFile: AVAudioFile?
     private var tempFileURL: URL?
     private let sessionID = UUID()
+
+    // MARK: - Real-time Audio Level
+
+    /// Current audio level (0.0 to 1.0), updated in real-time during recording
+    private(set) var currentAudioLevel: Double = 0.0
+
+    private var currentLevel: Double = 0.0
 
     private init() {}
 
@@ -28,6 +37,9 @@ final class AudioCaptureService {
         guard authStatus == .authorized else {
             throw AudioCaptureError.microphoneNotAuthorized
         }
+
+        // Start waveform monitor
+        await AudioWaveformMonitor.shared.startMonitoring()
 
         // Create temp file
         let tempDir = FileManager.default.temporaryDirectory
@@ -71,6 +83,10 @@ final class AudioCaptureService {
             } catch {
                 Logger.shared.error("Failed to write audio buffer: \(error.localizedDescription)")
             }
+
+            // Calculate and update audio level for visualization
+            let level = self.calculateAudioLevel(from: buffer)
+            self.updateAudioLevel(level)
         }
 
         // Start engine
@@ -111,6 +127,12 @@ final class AudioCaptureService {
         let finalURL = tempFileURL
         tempFileURL = nil
 
+        // Reset audio level for visualization
+        resetAudioLevel()
+
+        // Stop waveform monitor
+        AudioWaveformMonitor.shared.stopMonitoring()
+
         return finalURL!
     }
 
@@ -142,6 +164,50 @@ final class AudioCaptureService {
         } catch {
             Logger.shared.error("Failed to cleanup temp files: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Audio Level Calculation
+
+    private func calculateAudioLevel(from buffer: AVAudioPCMBuffer) -> Double {
+        guard let channelData = buffer.floatChannelData?[0] else {
+            return 0.0
+        }
+
+        let frameLength = Int(buffer.frameLength)
+        guard frameLength > 0 else {
+            return 0.0
+        }
+
+        // Calculate RMS (root mean square) for accurate amplitude
+        var sum: Double = 0.0
+        for i in 0..<frameLength {
+            let sample = Double(channelData[i])
+            sum += sample * sample
+        }
+        let rms = sqrt(sum / Double(frameLength))
+
+        // Apply logarithmic scaling for better dynamic range
+        // This matches human hearing perception better
+        let logarithmicLevel = log10(1.0 + rms * 9.0) // Maps 0-1 to 0-1 logarithmically
+
+        return logarithmicLevel
+    }
+
+    private func updateAudioLevel(_ newLevel: Double) {
+        // Apply more aggressive smoothing for less jittery animation
+        // Increased smoothingFactor from 0.3 to 0.15 for smoother visuals
+        let smoothed = (newLevel * 0.2) + (currentLevel * 0.8)
+        currentLevel = smoothed
+
+        // Update on main thread for UI reactivity
+        Task { @MainActor in
+            currentAudioLevel = smoothed
+        }
+    }
+
+    func resetAudioLevel() {
+        currentLevel = 0.0
+        currentAudioLevel = 0.0
     }
 }
 

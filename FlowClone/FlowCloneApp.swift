@@ -106,9 +106,46 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             hudWindowController = HUDWindowController(stateMachine: stateMachine)
         }
 
-        // Request microphone permission on first launch
+        // Request all permissions on first launch
+        requestPermissionsIfNeeded()
+    }
+
+    private func requestPermissionsIfNeeded() {
+        let permissions = PermissionsService.shared
+
+        // Microphone permission
         Task {
-            try? await PermissionsService.shared.requestMicrophonePermission()
+            do {
+                try await permissions.requestMicrophonePermission()
+            } catch {
+                Logger.shared.error("Microphone permission denied: \(error.localizedDescription)")
+            }
+
+            // After microphone permission, prompt for Accessibility/Input Monitoring
+            await MainActor.run {
+                promptForAccessibilityAndInputMonitoring()
+            }
+        }
+    }
+
+    private func promptForAccessibilityAndInputMonitoring() {
+        let permissions = PermissionsService.shared
+
+        // Check if we already have either permission
+        if permissions.accessibilityPermissionStatus == .granted ||
+           permissions.inputMonitoringPermissionStatus == .granted {
+            Logger.shared.info("✅ Accessibility or Input Monitoring already granted")
+            return
+        }
+
+        // Automatically prompt for Accessibility (shows system dialog)
+        Logger.shared.info("🔐 Requesting Accessibility permission...")
+        permissions.promptForAccessibilityPermission()
+
+        // After a short delay, prompt for Input Monitoring as well
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            Logger.shared.info("🔐 Requesting Input Monitoring permission...")
+            permissions.promptForInputMonitoringPermission()
         }
     }
 
@@ -119,6 +156,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         Logger.shared.info("FlowClone terminating")
-        HotkeyService.shared.stopMonitoring()
+        HotkeyService.shared.stop()
     }
 }

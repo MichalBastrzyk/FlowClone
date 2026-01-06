@@ -20,6 +20,7 @@ final class AppSettings {
         static let launchAtLogin = "launchAtLogin"
         static let hotkeyFallbackKeyCode = "hotkeyFallbackKeyCode"
         static let hotkeyFallbackModifiers = "hotkeyFallbackModifiers"
+        static let hotkeyIsModifierOnly = "hotkeyIsModifierOnly"
         static let useFnGlobeHotkey = "useFnGlobeHotkey"
     }
 
@@ -52,10 +53,12 @@ final class AppSettings {
         didSet {
             if let config = fallbackHotkey {
                 UserDefaults.standard.set(config.keyCode, forKey: Keys.hotkeyFallbackKeyCode)
-                UserDefaults.standard.set(config.modifiers.rawValue, forKey: Keys.hotkeyFallbackModifiers)
+                UserDefaults.standard.set(config.modifiersRawValue, forKey: Keys.hotkeyFallbackModifiers)
+                UserDefaults.standard.set(config.isModifierOnly, forKey: Keys.hotkeyIsModifierOnly)
             } else {
                 UserDefaults.standard.removeObject(forKey: Keys.hotkeyFallbackKeyCode)
                 UserDefaults.standard.removeObject(forKey: Keys.hotkeyFallbackModifiers)
+                UserDefaults.standard.removeObject(forKey: Keys.hotkeyIsModifierOnly)
             }
         }
     }
@@ -71,8 +74,13 @@ final class AppSettings {
 
         // Load fallback hotkey if saved
         if let keyCode = UserDefaults.standard.object(forKey: Keys.hotkeyFallbackKeyCode) as? Int,
-           let modifiersRaw = UserDefaults.standard.object(forKey: Keys.hotkeyFallbackModifiers) as? UInt {
-            self.fallbackHotkey = HotkeyConfig(keyCode: keyCode, modifiers: NSEvent.ModifierFlags(rawValue: modifiersRaw))
+           let modifiersRaw = UserDefaults.standard.object(forKey: Keys.hotkeyFallbackModifiers) as? UInt,
+           let isModifierOnly = UserDefaults.standard.object(forKey: Keys.hotkeyIsModifierOnly) as? Bool {
+            if isModifierOnly {
+                self.fallbackHotkey = HotkeyConfig(modifiers: NSEvent.ModifierFlags(rawValue: modifiersRaw))
+            } else {
+                self.fallbackHotkey = HotkeyConfig(keyCode: keyCode, modifiers: NSEvent.ModifierFlags(rawValue: modifiersRaw))
+            }
         } else {
             self.fallbackHotkey = nil
         }
@@ -129,28 +137,42 @@ enum LanguageMode: String, CaseIterable {
 struct HotkeyConfig: Equatable, Codable {
     let keyCode: Int
     let modifiersRawValue: UInt
+    let isModifierOnly: Bool
 
     var modifiers: NSEvent.ModifierFlags {
         NSEvent.ModifierFlags(rawValue: modifiersRawValue)
     }
 
+    // Regular hotkey with key code + modifiers
     init(keyCode: Int, modifiers: NSEvent.ModifierFlags) {
         self.keyCode = keyCode
         self.modifiersRawValue = modifiers.rawValue
+        self.isModifierOnly = false
+    }
+
+    // Modifier-only hotkey (e.g., hold Fn, hold Right Option)
+    init(modifiers: NSEvent.ModifierFlags) {
+        self.keyCode = 0 // Not used for modifier-only
+        self.modifiersRawValue = modifiers.rawValue
+        self.isModifierOnly = true
     }
 
     var displayName: String {
-        let modifierString: String
-        if modifiers.isEmpty {
-            modifierString = ""
+        if isModifierOnly {
+            var parts: [String] = []
+            if modifiers.contains(.command) { parts.append("⌘") }
+            if modifiers.contains(.option) { parts.append("⌥") }
+            if modifiers.contains(.control) { parts.append("⌃") }
+            if modifiers.contains(.shift) { parts.append("⇧") }
+            return parts.joined(separator: "+")
         } else {
             var parts: [String] = []
             if modifiers.contains(.command) { parts.append("⌘") }
             if modifiers.contains(.option) { parts.append("⌥") }
             if modifiers.contains(.control) { parts.append("⌃") }
             if modifiers.contains(.shift) { parts.append("⇧") }
-            modifierString = parts.joined()
+            let modifierString = parts.joined()
+            return "\(modifierString) Key\(keyCode)"
         }
-        return "\(modifierString) \(keyCode)"
     }
 }

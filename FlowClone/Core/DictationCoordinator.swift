@@ -7,6 +7,7 @@
 
 import Foundation
 import AppKit
+import AVFoundation
 
 @Observable
 final class DictationCoordinator {
@@ -55,12 +56,20 @@ final class DictationCoordinator {
         stateMachine.currentSession
     }
 
+    // Track previous permission state to detect when granted
+    private var previousAccessibilityPermission: PermissionStatus = .notDetermined
+
     // MARK: - Init
 
     private init() {
         setupStateMachine()
         setupHotkeyService()
         setupPermissionsObserver()
+        setupDictationCompleteObserver()
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 
     // MARK: - Setup
@@ -96,10 +105,33 @@ final class DictationCoordinator {
             name: NSApplication.didBecomeActiveNotification,
             object: nil
         )
+
+        // Initialize previous permission state
+        previousAccessibilityPermission = permissions.accessibilityPermissionStatus
     }
 
-    deinit {
-        NotificationCenter.default.removeObserver(self)
+    private func setupDictationCompleteObserver() {
+        // Observe state changes for successful dictation completion
+        Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+
+            // Check if we just completed dictation successfully
+            // We detect this by checking if previous state was .injecting and now is .idle
+            if self.previousStateWasInjecting && self.stateMachine.state == .idle {
+                self.playSuccessSound()
+                self.previousStateWasInjecting = false
+            } else if case .injecting = self.stateMachine.state {
+                self.previousStateWasInjecting = true
+            }
+        }
+    }
+
+    private var previousStateWasInjecting: Bool = false
+
+    private func playSuccessSound() {
+        // Play a satisfying system sound
+        NSSound(named: "Glass")?.play()
+        Logger.shared.info("✅ Dictation completed successfully!")
     }
 
     // MARK: - Hotkey Handling
@@ -118,10 +150,68 @@ final class DictationCoordinator {
 
     @objc private func permissionsChanged() {
         let oldCanRecord = permissions.canRecordAudio
+        let oldAccessibilityStatus = previousAccessibilityPermission
+
         permissions.refreshAllPermissions()
+
+        // Check if accessibility permission was just granted
+        if oldAccessibilityStatus != .granted && permissions.accessibilityPermissionStatus == .granted {
+            Logger.shared.info("✅ Accessibility permission granted!")
+            previousAccessibilityPermission = .granted
+            showRestartConfirmationModal()
+        }
+
+        // Update tracked state
+        previousAccessibilityPermission = permissions.accessibilityPermissionStatus
 
         if oldCanRecord != permissions.canRecordAudio {
             stateMachine.handle(.permissionsChanged)
+        }
+    }
+
+    private func showRestartConfirmationModal() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+
+            let alert = NSAlert()
+            alert.messageText = "Accessibility Permission Granted"
+            alert.informativeText = "FlowClone needs to restart to apply the new permission settings.\n\nWould you like to restart now?"
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "Restart Now")
+            alert.addButton(withTitle: "Later")
+
+            let response = alert.runModal()
+
+            if response == .alertFirstButtonReturn {
+                // User clicked "Restart Now"
+                Logger.shared.info("User confirmed restart - relaunching app...")
+                self.restartApp()
+            } else {
+                // User clicked "Later"
+                Logger.shared.info("User postponed restart")
+            }
+        }
+    }
+
+    private func restartApp() {
+        let bundleURL = Bundle.main.bundleURL
+
+        // Use NSWorkspace to relaunch the app
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+
+        NSWorkspace.shared.openApplication(
+            at: bundleURL,
+            configuration: config
+        ) { app, error in
+            if let error = error {
+                Logger.shared.error("Failed to relaunch app: \(error.localizedDescription)")
+            }
+        }
+
+        // Terminate current instance after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            NSApplication.shared.terminate(nil)
         }
     }
 

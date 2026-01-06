@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct SettingsView: View {
     @State private var settings = AppSettings()
@@ -17,11 +18,35 @@ struct SettingsView: View {
     @State private var showingAPIKeyError = false
     @State private var apiKeyErrorMessage = ""
 
+    // Hotkey test playground state
+    @State private var currentlyPressedModifiers: Set<String> = []
+    @State private var selectedHotkeyModifiers: Set<ModifierOption> = []
+
+    // Waveform test state
+    @State private var magnitudes = [Float](repeating: 0, count: 20)
+    @State private var testMagnitude: Float = 0.0
+    @State private var useRealAudio: Bool = false
+    private let audioTimer = Timer.publish(every: 0.016, on: .main, in: .common).autoconnect() // ~60fps
+
+    var currentMagnitudes: [Float] {
+        useRealAudio ? magnitudes : Array(repeating: testMagnitude, count: 20)
+    }
+
     var body: some View {
         TabView {
             generalTab
                 .tabItem {
                     Label("General", systemImage: "gearshape")
+                }
+
+            hotkeyTab
+                .tabItem {
+                    Label("Hotkey", systemImage: "command")
+                }
+
+            waveformTestTab
+                .tabItem {
+                    Label("Waveform", systemImage: "waveform")
                 }
 
             permissionsTab
@@ -37,6 +62,13 @@ struct SettingsView: View {
         .frame(width: 550, height: 450)
         .onAppear {
             loadAPIKey()
+            loadHotkeySettings()
+            setupHotkeyMonitoring()
+        }
+        .onReceive(audioTimer) { _ in
+            if useRealAudio {
+                magnitudes = AudioWaveformMonitor.shared.magnitudes
+            }
         }
     }
 
@@ -118,6 +150,216 @@ struct SettingsView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
+    // MARK: - Hotkey Tab
+
+    private var hotkeyTab: some View {
+        Form {
+            Section("Test Playground") {
+                VStack(spacing: 12) {
+                    Text("Press any modifier key to test detection:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    HStack(spacing: 8) {
+                        modifierKeyBadge("Fn", isPressed: currentlyPressedModifiers.contains("Fn"))
+                        modifierKeyBadge("Shift", isPressed: currentlyPressedModifiers.contains("Shift"))
+                        modifierKeyBadge("Control", isPressed: currentlyPressedModifiers.contains("Control"))
+                        modifierKeyBadge("Option", isPressed: currentlyPressedModifiers.contains("Option"))
+                        modifierKeyBadge("Command", isPressed: currentlyPressedModifiers.contains("Command"))
+                    }
+                    .padding(.vertical, 8)
+
+                    Text("Selected: \(currentlyPressedModifiers.sorted().joined(separator: " + "))")
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundColor(currentlyPressedModifiers.isEmpty ? .secondary : .primary)
+                }
+                .frame(maxWidth: .infinity)
+            }
+
+            Section("Hotkey Configuration") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Select the modifier(s) to use as your recording hotkey:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Picker("Single Modifier", selection: $selectedHotkeyModifiers) {
+                        Text("None").tag(Set<ModifierOption>())
+                        Text("Fn").tag(Set<ModifierOption>([.fn]))
+                        Text("Option ⌥").tag(Set<ModifierOption>([.option]))
+                        Text("Control ⌃").tag(Set<ModifierOption>([.control]))
+                        Text("Shift ⇧").tag(Set<ModifierOption>([.shift]))
+                        Text("Command ⌘").tag(Set<ModifierOption>([.command]))
+                    }
+                    .onChange(of: selectedHotkeyModifiers) { _, _ in
+                        saveHotkeySettings()
+                    }
+
+                    Divider()
+
+                    Text("Combinations (hold all modifiers)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Picker("", selection: $selectedHotkeyModifiers) {
+                        Text("None").tag(Set<ModifierOption>())
+                        Text("Command + Option").tag(Set<ModifierOption>([.command, .option]))
+                        Text("Command + Shift").tag(Set<ModifierOption>([.command, .shift]))
+                        Text("Control + Option").tag(Set<ModifierOption>([.control, .option]))
+                    }
+                    .onChange(of: selectedHotkeyModifiers) { _, _ in
+                        saveHotkeySettings()
+                    }
+                }
+
+                HStack {
+                    Text("Current hotkey:")
+                        .foregroundColor(.secondary)
+                    Text(hotkeyDisplayString)
+                        .fontWeight(.semibold)
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+
+                Text("Hold your selected modifier(s) to start recording, release to stop")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private func modifierKeyBadge(_ name: String, isPressed: Bool) -> some View {
+        Text(name)
+            .font(.system(.caption, design: .rounded))
+            .fontWeight(.medium)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isPressed ? Color.accentColor : Color.gray.opacity(0.2))
+            )
+            .foregroundColor(isPressed ? .white : .primary)
+    }
+
+    private var hotkeyDisplayString: String {
+        if selectedHotkeyModifiers.isEmpty {
+            return "Not set"
+        }
+
+        let sorted = selectedHotkeyModifiers.sorted { $0.displayName < $1.displayName }
+        return sorted.map { $0.displayName }.joined(separator: " + ")
+    }
+
+    // MARK: - Waveform Test Tab
+
+    private var waveformTestTab: some View {
+        Form {
+            Section("Waveform Visualization") {
+                VStack(spacing: 20) {
+                    // Waveform preview
+                    HStack(spacing: 3) {
+                        ForEach(0..<20, id: \.self) { i in
+                            let magnitude = i < currentMagnitudes.count ? currentMagnitudes[i] : 0
+                            WaveBar(
+                                index: i,
+                                magnitude: magnitude,
+                                isRecording: true
+                            )
+                        }
+                    }
+                    .frame(height: 32)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.gray.opacity(0.1))
+                    )
+
+                    // Magnitude display
+                    HStack {
+                        Text("Average Magnitude:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        let avgMagnitude = currentMagnitudes.reduce(0, +) / Float(currentMagnitudes.count)
+                        Text(String(format: "%.3f", avgMagnitude))
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                }
+            }
+
+            Section("Controls") {
+                Toggle("Use Real Audio Input", isOn: $useRealAudio)
+                    .help("When enabled, uses your actual microphone. When disabled, use the slider below.")
+                    .onChange(of: useRealAudio) { _, isRealAudio in
+                        if isRealAudio {
+                            // Start monitoring
+                            Task {
+                                await AudioWaveformMonitor.shared.startMonitoring()
+                            }
+                        } else {
+                            // Stop monitoring
+                            AudioWaveformMonitor.shared.stopMonitoring()
+                        }
+                    }
+
+                if !useRealAudio {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Manual Magnitude")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text(String(format: "%.2f", testMagnitude))
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
+
+                        Slider(value: $testMagnitude, in: 0...1)
+                            .controlSize(.small)
+
+                        HStack(spacing: 10) {
+                            Button("0.0") { testMagnitude = 0.0 }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            Button("0.25") { testMagnitude = 0.25 }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            Button("0.5") { testMagnitude = 0.5 }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            Button("0.75") { testMagnitude = 0.75 }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                            Button("1.0") { testMagnitude = 1.0 }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
+            Section("Info") {
+                Text("Uses FFT (Fast Fourier Transform) to analyze audio frequencies. Each bar represents a different frequency range.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(Color(nsColor: .windowBackgroundColor))
+        .onDisappear {
+            // Stop monitoring when leaving the tab
+            if useRealAudio {
+                useRealAudio = false
+                AudioWaveformMonitor.shared.stopMonitoring()
+            }
+        }
+    }
+
     // MARK: - Permissions Tab
 
     private var permissionsTab: some View {
@@ -148,16 +390,6 @@ struct SettingsView: View {
                     },
                     actionLabel: "Open Settings"
                 )
-
-                permissionRow(
-                    title: "Input Monitoring",
-                    icon: "keyboard",
-                    status: permissions.inputMonitoringPermissionStatus,
-                    action: {
-                        permissions.promptForInputMonitoringPermission()
-                    },
-                    actionLabel: "Open Settings"
-                )
             }
 
             Section("Info") {
@@ -167,7 +399,7 @@ struct SettingsView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("• Microphone: To record audio")
-                    Text("• Accessibility or Input Monitoring: For global hotkey and text injection")
+                    Text("• Accessibility: For global hotkey and text injection")
                 }
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -218,35 +450,6 @@ struct SettingsView: View {
             Button("Copy Diagnostics") {
                 DictationCoordinator.shared.copyDiagnostics()
             }
-
-            Divider()
-
-            // Hotkey testing section
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Hotkey Test")
-                    .font(.headline)
-                Text("Press any key to test if it's detected:")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                Text("Try: Fn key, Cmd+Shift+Space, or other keys")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                Text("Open Console.app to see key detection logs")
-                    .font(.caption)
-                    .foregroundColor(.orange)
-            }
-            .padding(.vertical, 8)
-            .padding(.horizontal, 12)
-            .background(Color.gray.opacity(0.1))
-            .cornerRadius(8)
-
-            Divider()
-
-            Text("Hold your hotkey to record, release to transcribe")
-                .font(.caption)
-                .foregroundColor(.secondary)
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -328,7 +531,107 @@ struct SettingsView: View {
             Logger.shared.error("Failed to remove API key: \(error.localizedDescription)")
         }
     }
+
+    // MARK: - Hotkey Management
+
+    private func loadHotkeySettings() {
+        guard let config = settings.fallbackHotkey, config.isModifierOnly else {
+            selectedHotkeyModifiers = []
+            return
+        }
+
+        var modifiers: Set<ModifierOption> = []
+
+        if config.modifiers.contains(.shift) {
+            modifiers.insert(.shift)
+        }
+        if config.modifiers.contains(.control) {
+            modifiers.insert(.control)
+        }
+        if config.modifiers.contains(.option) {
+            modifiers.insert(.option)
+        }
+        if config.modifiers.contains(.command) {
+            modifiers.insert(.command)
+        }
+
+        // Fn is detected by having no standard modifiers
+        if modifiers.isEmpty && config.isModifierOnly {
+            modifiers.insert(.fn)
+        }
+
+        selectedHotkeyModifiers = modifiers
+    }
+
+    private func saveHotkeySettings() {
+        if selectedHotkeyModifiers.isEmpty {
+            settings.fallbackHotkey = nil
+            HotkeyService.shared.setFallbackHotkey(nil)
+            return
+        }
+
+        var flags: NSEvent.ModifierFlags = []
+
+        for modifier in selectedHotkeyModifiers {
+            switch modifier {
+            case .shift:
+                flags.insert(.shift)
+            case .control:
+                flags.insert(.control)
+            case .option:
+                flags.insert(.option)
+            case .command:
+                flags.insert(.command)
+            case .fn:
+                // Fn is handled separately
+                break
+            }
+        }
+
+        let config = HotkeyConfig(modifiers: flags)
+        settings.fallbackHotkey = config
+        HotkeyService.shared.setFallbackHotkey(config)
+
+        Logger.shared.info("Hotkey saved: \(hotkeyDisplayString)")
+    }
+
+    private func setupHotkeyMonitoring() {
+        // Listen to modifier changes for the test playground
+        HotkeyService.shared.onModifiersChanged = { modifiers in
+            DispatchQueue.main.async {
+                self.currentlyPressedModifiers = Set(modifiers.map { $0.displayName })
+            }
+        }
+    }
 }
+
+// MARK: - Supporting Types
+
+enum ModifierOption: CaseIterable, Hashable {
+    case shift
+    case control
+    case option
+    case command
+    case fn
+
+    var displayName: String {
+        switch self {
+        case .shift: return "Shift"
+        case .control: return "Control"
+        case .option: return "Option"
+        case .command: return "Command"
+        case .fn: return "Fn"
+        }
+    }
+}
+
+extension ModifierOption: Comparable {
+    static func < (lhs: ModifierOption, rhs: ModifierOption) -> Bool {
+        lhs.displayName < rhs.displayName
+    }
+}
+
+// MARK: - Preview
 
 #Preview {
     SettingsView()

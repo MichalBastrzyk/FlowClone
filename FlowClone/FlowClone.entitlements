@@ -2,28 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Microphone access -->
-	<key>com.apple.security.device.microphone</key>
-	<true/>
-
-	<!-- Network access for Groq API -->
-	<key>com.apple.security.network.client</key>
-	<true/>
-
-	<!-- Accessibility (optional - will be requested at runtime) -->
-	<!-- Note: This cannot be enabled in sandbox mode, user must grant it manually -->
-
-	<!-- Input Monitoring (optional - will be requested at runtime) -->
-	<!-- Note: This cannot be enabled in sandbox mode, user must grant it manually -->
-
-	<!-- File access for temp audio files -->
-	<key>com.apple.security.files.user-selected.read-write</key>
-	<true/>
-
-	<!-- Keychain access for API key storage -->
-	<key>com.apple.security.application-groups</key>
-	<array>
-		<string>com.michalbastrzyk.FlowClone</string>
-	</array>
+	<!-- Entitlements file cleared for development without sandbox -->
+	<!-- Accessibility and Input Monitoring permissions will be requested at runtime -->
 </dict>
 </plist>

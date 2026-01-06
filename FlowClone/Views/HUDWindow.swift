@@ -24,17 +24,29 @@ final class HUDWindow: NSWindow {
         self.isMovable = false
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
-        // Center the window
-        if let screen = NSScreen.main {
-            let screenFrame = screen.visibleFrame
-            let windowFrame = self.frame
-            self.setFrameOrigin(
-                NSPoint(
-                    x: screenFrame.midX - windowFrame.width / 2,
-                    y: screenFrame.midY - windowFrame.height / 2 + 100 // Slightly above center
-                )
-            )
+        // Position on the screen where the mouse is located
+        repositionOnMouseScreen()
+    }
+
+    func repositionOnMouseScreen() {
+        // Get mouse location
+        let mouseLocation = NSEvent.mouseLocation
+
+        // Find which screen contains the mouse
+        guard let screen = NSScreen.screens.first(where: { screen in
+            screen.frame.contains(mouseLocation)
+        }) ?? NSScreen.main else {
+            return
         }
+
+        let screenFrame = screen.visibleFrame
+        let windowFrame = self.frame
+
+        // Center horizontally, position low near the Dock (bottom 5% of screen)
+        let targetX = screenFrame.midX - windowFrame.width / 2
+        let targetY = screenFrame.minY + (screenFrame.height * 0.05) - windowFrame.height / 2
+
+        self.setFrameOrigin(NSPoint(x: targetX, y: targetY))
     }
 }
 
@@ -90,8 +102,15 @@ final class HUDWindowController: NSWindowController {
             switch newState {
             case .idle:
                 window.orderOut(nil)
-            case .arming, .recording, .stopping, .transcribing, .injecting, .error:
+            case .arming, .recording, .stopping, .error:
+                // Reposition to mouse screen before showing
+                if let hudWindow = window as? HUDWindow {
+                    hudWindow.repositionOnMouseScreen()
+                }
                 window.orderFrontRegardless()
+            case .transcribing, .injecting:
+                // Hide HUD immediately for these states
+                window.orderOut(nil)
             }
         }
     }

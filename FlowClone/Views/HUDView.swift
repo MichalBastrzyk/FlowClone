@@ -13,61 +13,97 @@ struct HUDView: View {
     let session: RecordingSession?
 
     @State private var recordingDuration: TimeInterval = 0
+    @State private var isVisible = false
+    @State private var magnitudes = [Float](repeating: 0, count: 20)
     private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
 
-    var body: some View {
-        Group {
-            switch state {
-            case .idle:
-                EmptyView()
-
-            case .arming:
-                pill(content: "Getting Ready...", icon: "hand.raised.fill")
-
-            case .recording:
-                recordingPill
-
-            case .stopping:
-                pill(content: "Stopping...", icon: "stop.circle.fill")
-
-            case .transcribing:
-                pill(content: "Transcribing...", icon: "waveform")
-
-            case .injecting:
-                pill(content: "Inserting Text...", icon: "keyboard")
-
-            case .error(let message, _):
-                errorPill(message: message)
-            }
+    private var shouldShow: Bool {
+        switch state {
+        case .recording, .error:
+            return true
+        default:
+            return false
         }
-        .frame(maxWidth: 300)
-        .padding(.horizontal, 24)
-        .animation(.easeInOut(duration: 0.2), value: state)
     }
 
-    private var recordingPill: some View {
-        VStack(spacing: 8) {
-            pill(content: formattedDuration, icon: "circle.fill", isRecording: true)
-
-            // Audio waveform visualization (simplified)
-            HStack(spacing: 4) {
-                ForEach(0..<20, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.white)
-                        .frame(width: 4, height: randomHeight(for: i))
-                        .animation(
-                            .easeInOut(duration: 0.3)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(i) * 0.05),
-                            value: UUID()
-                        )
+    var body: some View {
+        HStack {
+            Spacer()
+            Group {
+                if shouldShow {
+                    content
+                        .opacity(isVisible ? 1 : 0)
+                        .scaleEffect(isVisible ? 1 : 0.92)
+                        .blur(radius: isVisible ? 0 : 3)
                 }
             }
-            .frame(height: 24)
+            Spacer()
+        }
+        .onChange(of: shouldShow) { _, newValue in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isVisible = newValue
+            }
         }
         .onAppear {
-            // Start timer for recording duration
+            if shouldShow {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    isVisible = true
+                }
+            }
         }
+        .onReceive(timer) { _ in
+            if case .recording = state {
+                magnitudes = AudioWaveformMonitor.shared.magnitudes
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch state {
+        case .recording:
+            recordingPill
+        case .error(let message, _):
+            errorPill(message: message)
+        default:
+            EmptyView()
+        }
+    }
+
+    // MARK: - Recording Pill
+    private var recordingPill: some View {
+        HStack(spacing: 0) {
+            // Reactive waveform bars - centered vertically
+            HStack(spacing: 3) {
+                ForEach(0..<20, id: \.self) { i in
+                    WaveBar(
+                        index: i,
+                        magnitude: i < magnitudes.count ? magnitudes[i] : 0,
+                        isRecording: true
+                    )
+                }
+            }
+            .frame(height: 32, alignment: .center) // Taller container for better centering
+            .padding(.vertical, 0) // Remove padding to ensure true center
+
+            Spacer().frame(width: 16)
+
+            // Timer - also centered
+            Text(formattedDuration)
+                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .foregroundColor(.white.opacity(0.9))
+                .frame(height: 32, alignment: .center) // Match waveform height
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+        .background(
+            Capsule()
+                .fill(Color.black)
+                .overlay(
+                    Capsule()
+                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                )
+        )
         .onReceive(timer) { _ in
             if case .recording(let session) = state {
                 recordingDuration = Date().timeIntervalSince(session.startedAt)
@@ -75,77 +111,94 @@ struct HUDView: View {
         }
     }
 
-    private func pill(content: String, icon: String, isRecording: Bool = false) -> some View {
-        HStack(spacing: 8) {
-            if isRecording {
-                Circle()
-                    .fill(Color.red)
-                    .frame(width: 8, height: 8)
-                    .shadow(color: .red, radius: 4)
-            } else {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
-            }
-
-            Text(content)
-                .font(.system(size: 13, weight: .medium))
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(
-            Capsule()
-                .fill(Color.black.opacity(0.85))
-                .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
-        )
-        .foregroundColor(.white)
-    }
-
+    // MARK: - Error Pill
     private func errorPill(message: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundColor(.orange)
-                .font(.system(size: 14, weight: .semibold))
+        HStack(spacing: 10) {
+            Circle()
+                .fill(Color.white)
+                .frame(width: 6, height: 6)
 
             Text(message)
                 .font(.system(size: 13, weight: .medium))
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
+                .foregroundColor(.white.opacity(0.9))
+                .lineLimit(1)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
         .background(
             Capsule()
-                .fill(Color.black.opacity(0.85))
-                .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
+                .fill(Color.black)
+                .overlay(
+                    Capsule()
+                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                )
         )
-        .foregroundColor(.white)
     }
 
     private var formattedDuration: String {
         let minutes = Int(recordingDuration) / 60
         let seconds = Int(recordingDuration) % 60
-        let milliseconds = Int((recordingDuration.truncatingRemainder(dividingBy: 1)) * 10)
-
-        return String(format: "%02d:%02d.%01d", minutes, seconds, milliseconds)
-    }
-
-    private func randomHeight(for index: Int) -> CGFloat {
-        // Simulate waveform heights
-        let pattern: [CGFloat] = [8, 12, 16, 20, 24, 20, 16, 12, 8, 10,
-                                   14, 18, 22, 18, 14, 10, 6, 10, 14, 18]
-        return pattern[index % pattern.count]
+        let tenths = Int((recordingDuration.truncatingRemainder(dividingBy: 1)) * 10)
+        return String(format: "%d:%02d.%d", minutes, seconds, tenths)
     }
 }
 
+// MARK: - Wave Bar
+struct WaveBar: View {
+    let index: Int
+    var magnitude: Float
+    let isRecording: Bool
+
+    @State private var currentHeight: CGFloat = 8
+
+    private var baseHeight: CGFloat {
+        // Varied heights for visual interest in silence
+        let pattern: [CGFloat] = [6, 8, 10, 12, 9, 11, 7, 13, 10, 8, 12, 9, 14, 10, 7, 11, 9, 12, 8, 6]
+        return pattern[index % pattern.count]
+    }
+
+    private var maxHeight: CGFloat {
+        // Maximum height varies by position
+        let pattern: [CGFloat] = [14, 18, 22, 26, 16, 20, 15, 28, 20, 16, 22, 18, 30, 22, 15, 20, 18, 24, 18, 14]
+        return pattern[index % pattern.count]
+    }
+
+    var body: some View {
+        Capsule()
+            .fill(Color.white.opacity(0.85))
+            .frame(width: 3, height: currentHeight)
+            .onAppear {
+                currentHeight = baseHeight
+            }
+            .onChange(of: magnitude) { _, newMagnitude in
+                guard isRecording else { return }
+
+                // Calculate height based on FFT magnitude
+                let audioHeight = CGFloat(newMagnitude) * (maxHeight - baseHeight)
+                let targetHeight = baseHeight + audioHeight
+
+                // Smooth animation
+                withAnimation(.easeOut(duration: 0.08)) {
+                    currentHeight = targetHeight
+                }
+            }
+    }
+}
+
+// MARK: - Preview
 #Preview {
     ZStack {
-        Color.gray.opacity(0.3)
+        Color(white: 0.15)
+            .ignoresSafeArea()
 
-        VStack(spacing: 20) {
-            HUDView(state: .arming(startedAt: Date()), session: nil)
-            HUDView(state: .recording(session: RecordingSession(tempFileURL: URL(fileURLWithPath: "/tmp/test"))), session: nil)
-            HUDView(state: .transcribing(session: RecordingSession(tempFileURL: URL(fileURLWithPath: "/tmp/test"))), session: nil)
-            HUDView(state: .error(message: "Microphone permission required", recoverable: true), session: nil)
+        VStack(spacing: 40) {
+            HUDView(
+                state: .recording(session: RecordingSession(tempFileURL: URL(fileURLWithPath: "/tmp/test"))),
+                session: nil
+            )
+
+            HUDView(state: .error(message: "Microphone access required", recoverable: true), session: nil)
         }
     }
+    .frame(width: 400, height: 300)
 }

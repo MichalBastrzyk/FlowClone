@@ -25,6 +25,16 @@ final class TextInjectionService {
             return
         }
 
+        // Check if there's a frontmost application to receive text
+        let runningApps = NSWorkspace.shared.runningApplications
+        guard let frontmostApp = runningApps.first(where: { $0.isActive }),
+              let bundleId = frontmostApp.bundleIdentifier else {
+            Logger.shared.error("No active application found to inject text")
+            throw TextInjectionError.frontmostAppNotAvailable
+        }
+
+        Logger.shared.debug("Frontmost app: \(bundleId)")
+
         switch mode {
         case .paste:
             try await injectViaPaste(text)
@@ -47,21 +57,23 @@ final class TextInjectionService {
         // Set new clipboard content
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        Logger.shared.debug("Clipboard set with \(text.count) characters")
 
-        // Small delay to ensure clipboard is set
-        try await Task.sleep(nanoseconds: 50_000_000) // 50ms
+        // Delay to ensure clipboard is set
+        try await Task.sleep(nanoseconds: 100_000_000) // 100ms (increased from 50ms)
 
         // Synthesize Cmd+V
-        await synthesizeKeyCode(9, withModifiers: .command) // VK_V = 9
+        Logger.shared.debug("Sending Cmd+V...")
+        try await synthesizeKeyCode(9, withModifiers: .command) // VK_V = 9
 
-        // Wait for paste to complete
-        try await Task.sleep(nanoseconds: 200_000_000) // 200ms
+        // Wait longer for paste to complete (some apps need more time)
+        try await Task.sleep(nanoseconds: 300_000_000) // 300ms (increased from 200ms)
 
         // Restore clipboard
         if let oldContents = oldContents {
             pasteboard.clearContents()
             pasteboard.setString(oldContents, forType: .string)
-            Logger.shared.debug("Clipboard restored")
+            Logger.shared.debug("Clipboard restored to: \(oldContents.prefix(50))...")
         }
     }
 
@@ -85,23 +97,20 @@ final class TextInjectionService {
             throw TextInjectionError.keyboardLayoutNotFound
         }
 
-        var lastChar: Character?
-        var keyPressDelay: UInt64 = 10_000_000 // 10ms between keystrokes
+        let keyPressDelay: UInt64 = 10_000_000 // 10ms between keystrokes
 
         for char in text {
             // Handle newlines
             if char == "\n" {
-                await synthesizeKeyCode(36, withModifiers: []) // VK_Return = 36
+                try await synthesizeKeyCode(36, withModifiers: []) // VK_Return = 36
                 try await Task.sleep(nanoseconds: keyPressDelay)
-                lastChar = char
                 continue
             }
 
             // Handle tabs
             if char == "\t" {
-                await synthesizeKeyCode(48, withModifiers: []) // VK_Tab = 48
+                try await synthesizeKeyCode(48, withModifiers: []) // VK_Tab = 48
                 try await Task.sleep(nanoseconds: keyPressDelay)
-                lastChar = char
                 continue
             }
 
@@ -116,10 +125,8 @@ final class TextInjectionService {
             }
 
             // Press and release key
-            await synthesizeKeyCode(keyCode, withModifiers: modifiers)
+            try await synthesizeKeyCode(keyCode, withModifiers: modifiers)
             try await Task.sleep(nanoseconds: keyPressDelay)
-
-            lastChar = char
         }
 
         Logger.shared.debug("Typed \(text.count) characters")
@@ -127,23 +134,31 @@ final class TextInjectionService {
 
     // MARK: - Key Synthesis
 
-    private func synthesizeKeyCode(_ keyCode: CGKeyCode, withModifiers: NSEvent.ModifierFlags) async {
+    private func synthesizeKeyCode(_ keyCode: CGKeyCode, withModifiers: NSEvent.ModifierFlags) async throws {
         let flags = modifiersToCGFlags(withModifiers)
 
         // Key down
-        if let eventDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) {
-            eventDown.flags = flags
-            eventDown.post(tap: .cgAnnotatedSessionEventTap)
+        guard let eventDown = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else {
+            Logger.shared.error("Failed to create key down event for keyCode: \(keyCode)")
+            throw TextInjectionError.injectionFailed
         }
 
-        // Small delay
+        eventDown.flags = flags
+        eventDown.post(tap: .cgAnnotatedSessionEventTap)
+        Logger.shared.debug("Sent key down: keyCode=\(keyCode), flags=\(flags)")
+
+        // Small delay between down and up
         try? await Task.sleep(nanoseconds: 5_000_000) // 5ms
 
         // Key up
-        if let eventUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) {
-            eventUp.flags = flags
-            eventUp.post(tap: .cgAnnotatedSessionEventTap)
+        guard let eventUp = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else {
+            Logger.shared.error("Failed to create key up event for keyCode: \(keyCode)")
+            throw TextInjectionError.injectionFailed
         }
+
+        eventUp.flags = flags
+        eventUp.post(tap: .cgAnnotatedSessionEventTap)
+        Logger.shared.debug("Sent key up: keyCode=\(keyCode), flags=\(flags)")
     }
 
     private func modifiersToCGFlags(_ modifiers: NSEvent.ModifierFlags) -> CGEventFlags {
@@ -168,8 +183,6 @@ final class TextInjectionService {
     // MARK: - Character to Key Code
 
     private func charToKeyCode(_ char: Character, layoutPtr: UnsafePointer<UInt8>) -> CGKeyCode {
-        let charCode = char.asciiValue ?? 0
-
         // Map common characters to key codes
         // This is a simplified mapping - in production you'd use the UCKeyTranslate API
         let keyMap: [Character: CGKeyCode] = [
