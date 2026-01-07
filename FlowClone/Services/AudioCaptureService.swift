@@ -36,7 +36,7 @@ final class AudioCaptureService {
         currentSessionID = sessionID
 
         // Start waveform monitor
-        AudioWaveformMonitor.shared.startMonitoring()
+        await AudioWaveformMonitor.shared.startMonitoring()
 
         // Create temp file
         let tempDir = FileManager.default.temporaryDirectory
@@ -127,7 +127,7 @@ final class AudioCaptureService {
         currentSessionID = nil
 
         // Stop waveform monitor
-        AudioWaveformMonitor.shared.stopMonitoring()
+        await AudioWaveformMonitor.shared.stopMonitoring()
 
         return finalURL!
     }
