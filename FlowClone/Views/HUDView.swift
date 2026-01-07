@@ -70,9 +70,9 @@ struct HUDView: View {
     private var recordingPill: some View {
         HStack(spacing: 0) {
             // Reactive waveform bars - centered vertically and offset right
+            let magnitudes = waveformMonitor.magnitudes
             HStack(spacing: 3) {
                 ForEach(0..<barCount, id: \.self) { i in
-                    let magnitudes = waveformMonitor.magnitudes
                     WaveBar(
                         index: i,
                         magnitude: i < magnitudes.count ? magnitudes[i] : 0,

@@ -108,8 +108,10 @@ final class AudioCaptureService {
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)
 
-        // AVAudioFile automatically flushes when deallocated
-        // Just nil out the reference
+        // Ensure AVAudioFile has fully finalized its contents before releasing it
+        if let file = audioFile {
+            _ = file.frameLength
+        }
         audioFile = nil
 
         guard let fileURL = tempFileURL else {
