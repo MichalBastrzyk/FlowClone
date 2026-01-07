@@ -150,3 +150,4 @@ See [CLAUDE.md](CLAUDE.md) for architecture documentation.
 - Transcription powered by [Groq](https://groq.com)
 - Uses OpenAI's **Whisper** model via Groq API
 - Inspired by [WhisperFlow](https://whisperflow.app)
+- Waveform visualization inspired by [Create with Swift](https://www.createwithswift.com/creating-a-live-audio-waveform-in-swiftui/)
