@@ -15,7 +15,7 @@ struct FlowCloneApp: App {
     var body: some Scene {
         MenuBarExtra {
             Button("Open Settings") {
-                AppDelegate.shared.showSettings()
+                AppDelegate.shared?.showSettings()
             }
 
             Divider()
@@ -67,7 +67,7 @@ struct MenuBarIcon: View {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     /// The actual app delegate instance set by the system
-    private(set) static var shared: AppDelegate!
+    private(set) static var shared: AppDelegate?
 
     private var hudWindowController: HUDWindowController?
     private var settingsWindow: NSWindow?

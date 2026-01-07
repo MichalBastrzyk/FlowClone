@@ -91,11 +91,8 @@ final class HUDWindowController: NSWindowController {
                 let (newState, newSession) = withObservationTracking {
                     (self.stateMachine.state, self.stateMachine.currentSession)
                 } onChange: {
-                    // Schedule next tracking when changes occur
-                    Task { @MainActor [weak self] in
-                        guard let self = self else { return }
-                        trackChanges()
-                    }
+                    // Re-run tracking when changes occur, without creating a new Task
+                    trackChanges()
                 }
                 
                 self.updateHUD(newState: newState, newSession: newSession)

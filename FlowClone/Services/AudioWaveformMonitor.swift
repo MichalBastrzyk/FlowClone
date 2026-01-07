@@ -75,12 +75,14 @@ final class AudioWaveformMonitor {
     /// Start monitoring audio waveform.
     /// Note: This is intentionally synchronous (not async) as it only sets a flag.
     /// The actual audio processing happens asynchronously in processBuffer().
+    @MainActor
     func startMonitoring() {
         guard !isMonitoring else { return }
         Logger.shared.info("Audio waveform monitoring started")
         isMonitoring = true
     }
 
+    @MainActor
     func stopMonitoring() {
         guard isMonitoring else { return }
         Logger.shared.info("Audio waveform monitoring stopped")
