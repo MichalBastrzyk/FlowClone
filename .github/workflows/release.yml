@@ -10,6 +10,9 @@ on:
         required: false
         default: 'manual-build'
 
+permissions:
+  contents: write
+
 env:
   APP_NAME: FlowClone
   SCHEME: FlowClone
