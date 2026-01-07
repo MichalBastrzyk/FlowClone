@@ -1,0 +1,162 @@
+name: Build and Release
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: false
+        default: 'manual-build'
+
+env:
+  APP_NAME: FlowClone
+  SCHEME: FlowClone
+  PROJECT: FlowClone.xcodeproj
+
+jobs:
+  build:
+    name: Build and Create DMG
+    runs-on: macos-15
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build application (unsigned)
+        run: |
+          xcodebuild \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -derivedDataPath build \
+            -archivePath build/FlowClone.xcarchive \
+            archive \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM=""
+
+      - name: Export app from archive
+        run: |
+          mkdir -p build/export
+          cp -R "build/FlowClone.xcarchive/Products/Applications/FlowClone.app" build/export/
+
+      - name: Verify app bundle
+        run: |
+          echo "=== App bundle contents ==="
+          ls -la build/export/
+          echo "=== App Info.plist ==="
+          cat "build/export/FlowClone.app/Contents/Info.plist" | head -50
+
+      - name: Get version info
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Create DMG
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          DMG_NAME="${APP_NAME}-${VERSION}.dmg"
+          
+          # Create a temporary directory for DMG contents
+          mkdir -p dmg_contents
+          cp -R "build/export/FlowClone.app" dmg_contents/
+          
+          # Create a symbolic link to Applications folder
+          ln -s /Applications dmg_contents/Applications
+          
+          # Create the DMG
+          hdiutil create \
+            -volname "$APP_NAME" \
+            -srcfolder dmg_contents \
+            -ov \
+            -format UDZO \
+            "build/${DMG_NAME}"
+          
+          echo "dmg_path=build/${DMG_NAME}" >> $GITHUB_ENV
+          echo "dmg_name=${DMG_NAME}" >> $GITHUB_ENV
+          
+          echo "=== DMG created ==="
+          ls -la build/*.dmg
+
+      - name: Create ZIP archive
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ZIP_NAME="${APP_NAME}-${VERSION}.zip"
+          
+          cd build/export
+          zip -r -y "../${ZIP_NAME}" FlowClone.app
+          cd ../..
+          
+          echo "zip_path=build/${ZIP_NAME}" >> $GITHUB_ENV
+          echo "zip_name=${ZIP_NAME}" >> $GITHUB_ENV
+          
+          echo "=== ZIP created ==="
+          ls -la build/*.zip
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-DMG
+          path: ${{ env.dmg_path }}
+          retention-days: 30
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-ZIP
+          path: ${{ env.zip_path }}
+          retention-days: 30
+
+      - name: Upload to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.dmg_path }}
+            ${{ env.zip_path }}
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add installation instructions to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          append_body: true
+          body: |
+
+            ---
+            
+            ## Installation
+            
+            ### DMG (Recommended)
+            1. Download `${{ env.dmg_name }}`
+            2. Open the DMG file
+            3. Drag **FlowClone** to your Applications folder
+            4. Right-click the app and select "Open" (required for unsigned apps)
+            5. Click "Open" in the security dialog
+            
+            ### ZIP
+            1. Download `${{ env.zip_name }}`
+            2. Extract the ZIP file
+            3. Move **FlowClone.app** to your Applications folder
+            4. Right-click the app and select "Open" (required for unsigned apps)
+            
+            > ⚠️ **Note**: This app is not code-signed. macOS will show a security warning on first launch. Right-click and select "Open" to bypass Gatekeeper.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
