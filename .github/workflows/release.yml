@@ -33,7 +33,7 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Build application (unsigned)
+      - name: Build application
         run: |
           xcodebuild \
             -project "$PROJECT" \
@@ -43,7 +43,7 @@ jobs:
             -archivePath build/FlowClone.xcarchive \
             -allowProvisioningUpdates \
             archive \
-            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             DEVELOPMENT_TEAM="" \
@@ -53,6 +53,19 @@ jobs:
         run: |
           mkdir -p build/export
           cp -R "build/FlowClone.xcarchive/Products/Applications/FlowClone.app" build/export/
+
+      - name: Ad-hoc sign the app
+        run: |
+          # Remove any existing signatures and extended attributes
+          xattr -cr build/export/FlowClone.app
+          
+          # Ad-hoc sign the app with deep signing for all nested components
+          codesign --force --deep --sign - build/export/FlowClone.app
+          
+          # Verify the signature
+          codesign --verify --verbose build/export/FlowClone.app || true
+          echo "=== Code signature info ==="
+          codesign -dv build/export/FlowClone.app 2>&1 || true
 
       - name: Verify app bundle
         run: |
@@ -153,15 +166,22 @@ jobs:
             1. Download `${{ env.dmg_name }}`
             2. Open the DMG file
             3. Drag **FlowClone** to your Applications folder
-            4. Right-click the app and select "Open" (required for unsigned apps)
-            5. Click "Open" in the security dialog
+            4. Open Terminal and run:
+               ```
+               xattr -cr /Applications/FlowClone.app
+               ```
+            5. Open the app normally
             
             ### ZIP
             1. Download `${{ env.zip_name }}`
             2. Extract the ZIP file
             3. Move **FlowClone.app** to your Applications folder
-            4. Right-click the app and select "Open" (required for unsigned apps)
+            4. Open Terminal and run:
+               ```
+               xattr -cr /Applications/FlowClone.app
+               ```
+            5. Open the app normally
             
-            > ⚠️ **Note**: This app is not code-signed. macOS will show a security warning on first launch. Right-click and select "Open" to bypass Gatekeeper.
+            > ⚠️ **Note**: This app is not code-signed. The `xattr -cr` command removes the macOS quarantine flag that blocks unsigned apps downloaded from the internet.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
