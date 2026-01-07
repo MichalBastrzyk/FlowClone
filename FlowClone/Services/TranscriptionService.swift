@@ -10,10 +10,16 @@ import Foundation
 final class TranscriptionService {
     static let shared = TranscriptionService()
 
-    private let session = URLSession.shared
+    private let session: URLSession
     private let endpoint = URL(string: "https://api.groq.com/openai/v1/audio/transcriptions")!
 
-    private init() {}
+    private init() {
+        // Create a single reusable session with appropriate timeout
+        // URLSession instances must be reused to avoid memory leaks
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 60
+        self.session = URLSession(configuration: config)
+    }
 
     // MARK: - Transcription
 
@@ -74,14 +80,9 @@ final class TranscriptionService {
 
         request.httpBody = body
 
-        // Set timeout
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 60
-        let timedSession = URLSession(configuration: config)
-
-        // Send request
+        // Send request using the shared session
         do {
-            let (data, response) = try await timedSession.data(for: request)
+            let (data, response) = try await session.data(for: request)
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw TranscriptionError.invalidResponse

@@ -110,7 +110,7 @@ final class AudioCaptureService {
 
         // Ensure AVAudioFile has fully finalized its contents before releasing it
         if let file = audioFile {
-            _ = file.frameLength
+            _ = file.length
         }
         audioFile = nil
 

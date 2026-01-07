@@ -114,7 +114,8 @@ final class PermissionsService {
             options: .defaultTap,
             eventsOfInterest: CGEventMask(1 << CGEventType.flagsChanged.rawValue),
             callback: { proxy, type, event, refcon in
-                return Unmanaged.passRetained(event)
+                // Use passUnretained to avoid incrementing ref count (fixes memory leak)
+                return Unmanaged.passUnretained(event)
             },
             userInfo: nil
         )
@@ -122,6 +123,8 @@ final class PermissionsService {
         if let tap = tap {
             inputMonitoringPermissionStatus = .granted
             CGEvent.tapEnable(tap: tap, enable: false)
+            // Clean up the CFMachPort to prevent leak
+            CFMachPortInvalidate(tap)
         } else {
             inputMonitoringPermissionStatus = .denied
         }

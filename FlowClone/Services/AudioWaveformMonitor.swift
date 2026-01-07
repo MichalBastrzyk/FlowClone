@@ -42,6 +42,10 @@ final class AudioWaveformMonitor {
     
     // Serial queue for FFT processing to prevent race conditions
     private let processingQueue = DispatchQueue(label: "com.michalbastrzyk.FlowClone.audioProcessing", qos: .userInteractive)
+    
+    // Throttling to reduce CPU usage (30fps max)
+    private var lastProcessTime: CFAbsoluteTime = 0
+    private let minProcessInterval: CFAbsoluteTime = 0.033 // ~30fps
 
     // MARK: - Init
 
@@ -95,6 +99,11 @@ final class AudioWaveformMonitor {
     /// Process an audio buffer and update magnitudes. Called from AudioCaptureService's tap.
     func processBuffer(_ buffer: AVAudioPCMBuffer) {
         guard isMonitoring else { return }
+        
+        // Throttle to ~30fps to reduce CPU usage
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastProcessTime >= minProcessInterval else { return }
+        lastProcessTime = now
 
         // Process FFT on serial queue to prevent concurrent access to FFT buffers
         processingQueue.async { [weak self] in
@@ -120,19 +129,17 @@ final class AudioWaveformMonitor {
 
         let frameCount = Int(data.frameLength)
 
-        // Reset input arrays
-        realIn = [Float](repeating: 0, count: Constants.bufferSize)
-        imagIn = [Float](repeating: 0, count: Constants.bufferSize)
+        // Zero buffers in-place instead of reallocating (critical for memory/CPU)
+        vDSP_vclr(&realIn, 1, vDSP_Length(Constants.bufferSize))
+        vDSP_vclr(&imagIn, 1, vDSP_Length(Constants.bufferSize))
 
-        // Copy available data (up to buffer size)
+        // Copy available data (up to buffer size) using vDSP for efficiency
         let copyCount = min(frameCount, Constants.bufferSize)
-        for i in 0..<copyCount {
-            realIn[i] = channelData[i]
-        }
+        cblas_scopy(Int32(copyCount), channelData, 1, &realIn, 1)
 
-        // Reset output arrays
-        realOut = [Float](repeating: 0, count: Constants.bufferSize)
-        imagOut = [Float](repeating: 0, count: Constants.bufferSize)
+        // Zero output buffers in-place
+        vDSP_vclr(&realOut, 1, vDSP_Length(Constants.bufferSize))
+        vDSP_vclr(&imagOut, 1, vDSP_Length(Constants.bufferSize))
 
         // Execute FFT
         realIn.withUnsafeMutableBufferPointer { realInPtr in
@@ -151,8 +158,8 @@ final class AudioWaveformMonitor {
             }
         }
 
-        // Calculate magnitudes
-        fftMagnitudes = [Float](repeating: 0, count: Constants.sampleAmount)
+        // Calculate magnitudes (zero buffer in-place)
+        vDSP_vclr(&fftMagnitudes, 1, vDSP_Length(Constants.sampleAmount))
 
         var complex = DSPSplitComplex(
             realp: &realOut,

@@ -18,7 +18,9 @@ struct HUDView: View {
 
     @State private var recordingDuration: TimeInterval = 0
     @State private var isVisible = false
-    private let durationTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+    
+    // Use TimelineView for duration updates instead of a stored timer publisher
+    // This avoids timer accumulation when HUDView structs are recreated
 
     private var shouldShow: Bool {
         switch state {
@@ -94,11 +96,6 @@ struct HUDView: View {
                         .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
                 )
         )
-        .onReceive(durationTimer) { _ in
-            if case .recording(let session) = state {
-                recordingDuration = Date().timeIntervalSince(session.startedAt)
-            }
-        }
     }
 
     // MARK: - Error Pill

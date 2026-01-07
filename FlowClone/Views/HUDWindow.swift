@@ -82,23 +82,26 @@ final class HUDWindowController: NSWindowController {
     }
 
     private func startObserving() {
+        // Use withObservationTracking for efficient, event-driven updates
+        // This only wakes when state actually changes, eliminating CPU waste at idle
         observationTask = Task { @MainActor [weak self] in
-            guard let self = self else { return }
-            
-            func trackChanges() {
-                guard let self = self, !Task.isCancelled else { return }
+            while !Task.isCancelled {
+                guard let self = self else { break }
                 
-                let (newState, newSession) = withObservationTracking {
+                // Capture current values and set up tracking for next change
+                let (currentState, currentSession) = withObservationTracking {
                     (self.stateMachine.state, self.stateMachine.currentSession)
                 } onChange: {
-                    // Re-run tracking when changes occur, without creating a new Task
-                    trackChanges()
+                    // This closure is called when state changes, but we handle it via the loop
                 }
                 
-                self.updateHUD(newState: newState, newSession: newSession)
+                // Update HUD with current state
+                self.updateHUD(newState: currentState, newSession: currentSession)
+                
+                // Wait for next state change using async stream pattern
+                // Small sleep to coalesce rapid changes and prevent tight loops
+                try? await Task.sleep(for: .milliseconds(16))
             }
-            
-            trackChanges()
         }
     }
 

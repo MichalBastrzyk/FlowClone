@@ -43,6 +43,7 @@ final class DictationStateMachine {
 
     private var armingTimer: Timer?
     private var maxDurationTimer: Timer?
+    private var errorRecoveryTimer: Timer?
 
     // MARK: - Callbacks
 
@@ -242,9 +243,9 @@ final class DictationStateMachine {
         state = .error(message: message, recoverable: recoverable)
         cancelAllTimers()
 
-        // Auto-recover after delay
+        // Auto-recover after delay (store timer so it can be cancelled)
         if recoverable {
-            Timer.scheduledTimer(
+            errorRecoveryTimer = Timer.scheduledTimer(
                 withTimeInterval: errorAutoRecoveryDelay,
                 repeats: false
             ) { [weak self] _ in
@@ -266,6 +267,8 @@ final class DictationStateMachine {
         armingTimer = nil
         maxDurationTimer?.invalidate()
         maxDurationTimer = nil
+        errorRecoveryTimer?.invalidate()
+        errorRecoveryTimer = nil
     }
 
     // MARK: - Description Helpers
