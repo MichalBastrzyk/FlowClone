@@ -14,19 +14,19 @@ final class Logger {
 
     private init() {}
 
-    func debug(_ message: String, function: String = #function, file: String = #file) {
+    func debug(_ message: String) {
         os_log("%{public}@", log: logger, type: .debug, message)
     }
 
-    func info(_ message: String, function: String = #function, file: String = #file) {
+    func info(_ message: String) {
         os_log("%{public}@", log: logger, type: .info, message)
     }
 
-    func error(_ message: String, function: String = #function, file: String = #file) {
+    func error(_ message: String) {
         os_log("%{public}@", log: logger, type: .error, message)
     }
 
-    func fault(_ message: String, function: String = #function, file: String = #file) {
+    func fault(_ message: String) {
         os_log("%{public}@", log: logger, type: .fault, message)
     }
 

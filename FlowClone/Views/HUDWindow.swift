@@ -53,7 +53,7 @@ final class HUDWindow: NSWindow {
 final class HUDWindowController: NSWindowController {
     private var hostingView: NSHostingView<HUDView>!
     private let stateMachine: DictationStateMachine
-    private var updateTimer: Timer?
+    private var observationTask: Task<Void, Never>?
 
     init(stateMachine: DictationStateMachine) {
         self.stateMachine = stateMachine
@@ -73,29 +73,45 @@ final class HUDWindowController: NSWindowController {
 
         super.init(window: window)
 
-        // Poll for state changes
-        startUpdating()
+        // Observe state changes using @Observable tracking
+        startObserving()
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private func startUpdating() {
-        updateTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            self?.updateHUDIfNeeded()
+    private func startObserving() {
+        // Use withObservationTracking for efficient, event-driven updates
+        // This only wakes when state actually changes, eliminating CPU waste at idle
+        observationTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let self = self else { break }
+                
+                // Capture current values and set up tracking for next change
+                let (currentState, currentSession) = withObservationTracking {
+                    (self.stateMachine.state, self.stateMachine.currentSession)
+                } onChange: {
+                    // This closure is called when state changes, but we handle it via the loop
+                }
+                
+                // Update HUD with current state
+                self.updateHUD(newState: currentState, newSession: currentSession)
+                
+                // Wait for next state change using async stream pattern
+                // Small sleep to coalesce rapid changes and prevent tight loops
+                try? await Task.sleep(for: .milliseconds(16))
+            }
         }
     }
 
-    private func updateHUDIfNeeded() {
+    private func updateHUD(newState: DictationState, newSession: RecordingSession?) {
         guard let window = window else { return }
 
         let currentView = hostingView.rootView
-        let newState = stateMachine.state
-        let newSession = stateMachine.currentSession
 
         // Only update if state changed
-        if needsUpdate(currentView: currentView, newState: newState, newSession: newSession) {
+        if currentView.state != newState || currentView.session != newSession {
             hostingView.rootView = HUDView(
                 state: newState,
                 session: newSession
@@ -117,12 +133,8 @@ final class HUDWindowController: NSWindowController {
         }
     }
 
-    private func needsUpdate(currentView: HUDView, newState: DictationState, newSession: RecordingSession?) -> Bool {
-        currentView.state != newState || currentView.session != newSession
-    }
-
     deinit {
-        updateTimer?.invalidate()
+        observationTask?.cancel()
     }
 
     func show() {

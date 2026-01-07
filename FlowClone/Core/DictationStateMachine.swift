@@ -43,6 +43,12 @@ final class DictationStateMachine {
 
     private var armingTimer: Timer?
     private var maxDurationTimer: Timer?
+    private var errorRecoveryTimer: Timer?
+
+    // MARK: - Callbacks
+
+    /// Called when dictation completes successfully (after injection)
+    var onDictationComplete: (() -> Void)?
 
     // MARK: - Constants
 
@@ -107,7 +113,7 @@ final class DictationStateMachine {
 
         // INJECTING state
         case (.injecting, .injectionSucceeded):
-            transitionToIdle()
+            transitionToIdle(fromSuccessfulInjection: true)
 
         case (.injecting, .injectionFailed(let message)):
             transitionToError(message, recoverable: true)
@@ -138,9 +144,13 @@ final class DictationStateMachine {
 
     // MARK: - Transitions
 
-    private func transitionToIdle() {
+    private func transitionToIdle(fromSuccessfulInjection: Bool = false) {
         state = .idle
         cancelAllTimers()
+
+        if fromSuccessfulInjection {
+            onDictationComplete?()
+        }
     }
 
     private func transitionToArming(startedAt: Date) {
@@ -233,9 +243,9 @@ final class DictationStateMachine {
         state = .error(message: message, recoverable: recoverable)
         cancelAllTimers()
 
-        // Auto-recover after delay
+        // Auto-recover after delay (store timer so it can be cancelled)
         if recoverable {
-            Timer.scheduledTimer(
+            errorRecoveryTimer = Timer.scheduledTimer(
                 withTimeInterval: errorAutoRecoveryDelay,
                 repeats: false
             ) { [weak self] _ in
@@ -257,6 +267,8 @@ final class DictationStateMachine {
         armingTimer = nil
         maxDurationTimer?.invalidate()
         maxDurationTimer = nil
+        errorRecoveryTimer?.invalidate()
+        errorRecoveryTimer = nil
     }
 
     // MARK: - Description Helpers

@@ -11,6 +11,9 @@ import Observation
 
 @Observable
 final class AppSettings {
+    // MARK: - Singleton
+    static let shared = AppSettings()
+
     // MARK: - UserDefaults Keys
     private enum Keys {
         static let insertionMode = "insertionMode"
@@ -64,7 +67,7 @@ final class AppSettings {
     }
 
     // MARK: - Init
-    init() {
+    private init() {
         self.insertionMode = InsertionMode(rawValue: UserDefaults.standard.string(forKey: Keys.insertionMode) ?? InsertionMode.paste.rawValue) ?? .paste
         self.transcriptionModel = TranscriptionModel(rawValue: UserDefaults.standard.string(forKey: Keys.model) ?? TranscriptionModel.whisperLargeV3Turbo.rawValue) ?? .whisperLargeV3Turbo
         self.languageMode = LanguageMode(rawValue: UserDefaults.standard.string(forKey: Keys.languageMode) ?? LanguageMode.auto.rawValue) ?? .auto
@@ -134,45 +137,4 @@ enum LanguageMode: String, CaseIterable {
     }
 }
 
-struct HotkeyConfig: Equatable, Codable {
-    let keyCode: Int
-    let modifiersRawValue: UInt
-    let isModifierOnly: Bool
-
-    var modifiers: NSEvent.ModifierFlags {
-        NSEvent.ModifierFlags(rawValue: modifiersRawValue)
-    }
-
-    // Regular hotkey with key code + modifiers
-    init(keyCode: Int, modifiers: NSEvent.ModifierFlags) {
-        self.keyCode = keyCode
-        self.modifiersRawValue = modifiers.rawValue
-        self.isModifierOnly = false
-    }
-
-    // Modifier-only hotkey (e.g., hold Fn, hold Right Option)
-    init(modifiers: NSEvent.ModifierFlags) {
-        self.keyCode = 0 // Not used for modifier-only
-        self.modifiersRawValue = modifiers.rawValue
-        self.isModifierOnly = true
-    }
-
-    var displayName: String {
-        if isModifierOnly {
-            var parts: [String] = []
-            if modifiers.contains(.command) { parts.append("⌘") }
-            if modifiers.contains(.option) { parts.append("⌥") }
-            if modifiers.contains(.control) { parts.append("⌃") }
-            if modifiers.contains(.shift) { parts.append("⇧") }
-            return parts.joined(separator: "+")
-        } else {
-            var parts: [String] = []
-            if modifiers.contains(.command) { parts.append("⌘") }
-            if modifiers.contains(.option) { parts.append("⌥") }
-            if modifiers.contains(.control) { parts.append("⌃") }
-            if modifiers.contains(.shift) { parts.append("⇧") }
-            let modifierString = parts.joined()
-            return "\(modifierString) Key\(keyCode)"
-        }
-    }
-}
+// HotkeyConfig is now in its own file: HotkeyConfig.swift

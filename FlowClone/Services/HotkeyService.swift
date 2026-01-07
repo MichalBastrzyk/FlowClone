@@ -13,35 +13,10 @@ import CoreGraphics
 final class HotkeyService {
     static let shared = HotkeyService()
 
-    // MARK: - Enums
+    // MARK: - Type Aliases
 
-    enum Modifier: Hashable {
-        case shift
-        case control
-        case option
-        case command
-        case fn
-
-        var displayName: String {
-            switch self {
-            case .shift: return "Shift"
-            case .control: return "Control"
-            case .option: return "Option"
-            case .command: return "Command"
-            case .fn: return "Fn"
-            }
-        }
-
-        var cgFlag: CGEventFlags {
-            switch self {
-            case .shift: return .maskShift
-            case .control: return .maskControl
-            case .option: return .maskAlternate
-            case .command: return .maskCommand
-            case .fn: return .maskSecondaryFn
-            }
-        }
-    }
+    /// Use the shared ModifierOption type
+    typealias Modifier = ModifierOption
 
     struct ModifierSnapshot: Equatable {
         let down: Set<Modifier>
@@ -234,27 +209,8 @@ final class HotkeyService {
     }
 
     private func configToModifierSet(_ config: HotkeyConfig) -> Set<Modifier> {
-        var modifiers: Set<Modifier> = []
-
-        if config.modifiers.contains(.shift) {
-            modifiers.insert(.shift)
-        }
-        if config.modifiers.contains(.control) {
-            modifiers.insert(.control)
-        }
-        if config.modifiers.contains(.option) {
-            modifiers.insert(.option)
-        }
-        if config.modifiers.contains(.command) {
-            modifiers.insert(.command)
-        }
-
-        // Fn is detected separately - if it's a modifier-only config with no standard modifiers, assume Fn
-        if modifiers.isEmpty && config.isModifierOnly {
-            modifiers.insert(.fn)
-        }
-
-        return modifiers
+        // Use the built-in conversion method on HotkeyConfig
+        return config.toModifierSet()
     }
 
     private func triggerHotkeyDown() {
