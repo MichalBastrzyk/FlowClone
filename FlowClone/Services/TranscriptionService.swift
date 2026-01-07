@@ -159,8 +159,10 @@ enum TranscriptionError: LocalizedError {
 private extension Data {
     /// Appends a string to data using UTF-8 encoding. Safe alternative to force unwrapping.
     mutating func appendString(_ string: String) {
-        if let data = string.data(using: .utf8) {
-            append(data)
+        guard let data = string.data(using: .utf8) else {
+            fputs("TranscriptionService: Failed to encode string as UTF-8: \(string)\n", stderr)
+            return
         }
+        append(data)
     }
 }

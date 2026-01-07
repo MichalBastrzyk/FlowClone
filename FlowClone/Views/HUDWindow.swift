@@ -84,21 +84,24 @@ final class HUDWindowController: NSWindowController {
     private func startObserving() {
         observationTask = Task { @MainActor [weak self] in
             guard let self = self else { return }
-
-            while !Task.isCancelled {
-                // Track state changes using withObservationTracking
+            
+            func trackChanges() {
+                guard let self = self, !Task.isCancelled else { return }
+                
                 let (newState, newSession) = withObservationTracking {
                     (self.stateMachine.state, self.stateMachine.currentSession)
                 } onChange: {
-                    // This closure is called when tracked properties change
-                    // We'll handle the update in the outer loop
+                    // Schedule next tracking when changes occur
+                    Task { @MainActor [weak self] in
+                        guard let self = self else { return }
+                        trackChanges()
+                    }
                 }
-
+                
                 self.updateHUD(newState: newState, newSession: newSession)
-
-                // Wait for next change notification
-                try? await Task.sleep(nanoseconds: 16_000_000) // ~60fps max
             }
+            
+            trackChanges()
         }
     }
 
