@@ -87,20 +87,30 @@ final class HUDWindowController: NSWindowController {
         observationTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self = self else { break }
-                
-                // Capture current values and set up tracking for next change
+
+                // Use onChange properly - it will be called when state changes
+                var didChange = false
                 let (currentState, currentSession) = withObservationTracking {
                     (self.stateMachine.state, self.stateMachine.currentSession)
                 } onChange: {
-                    // This closure is called when state changes, but we handle it via the loop
+                    didChange = true
                 }
-                
-                // Update HUD with current state
-                self.updateHUD(newState: currentState, newSession: currentSession)
-                
-                // Wait for next state change using async stream pattern
-                // Small sleep to coalesce rapid changes and prevent tight loops
-                try? await Task.sleep(for: .milliseconds(16))
+
+                // Only update UI if state actually changed
+                if didChange {
+                    self.updateHUD(newState: currentState, newSession: currentSession)
+                }
+
+                // Wait for next state change - no more polling!
+                // The onChange closure will be triggered by the observation system
+                // when state changes, which will cause the next iteration to detect it
+                await withCheckedContinuation { continuation in
+                    // Small delay to coalesce rapid changes
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 16_000_000)
+                        continuation.resume()
+                    }
+                }
             }
         }
     }
