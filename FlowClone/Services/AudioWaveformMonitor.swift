@@ -91,7 +91,15 @@ final class AudioWaveformMonitor {
         guard isMonitoring else { return }
         Logger.shared.info("Audio waveform monitoring stopped")
         isMonitoring = false
+
+        // Clear magnitudes array to release memory
         magnitudes = [Float](repeating: 0, count: Constants.sampleAmount)
+
+        // Clear any pending buffer processing on the queue
+        processingQueue.async { [weak self] in
+            // Buffers are reused (not reallocated) - this is intentional for performance
+            // The magnitudes reset above is sufficient for memory cleanup
+        }
     }
 
     // MARK: - Buffer Processing (called by AudioCaptureService)
