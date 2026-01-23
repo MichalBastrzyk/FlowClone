@@ -100,6 +100,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Initialize the coordinator to start services
         _ = DictationCoordinator.shared
 
+        // Start memory monitoring for diagnostics
+        MemoryMonitor.shared.startMonitoring()
+
         Logger.shared.info("FlowClone started")
 
         // Setup HUD window
