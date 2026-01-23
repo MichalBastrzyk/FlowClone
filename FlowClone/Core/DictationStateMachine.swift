@@ -13,7 +13,15 @@ final class DictationStateMachine {
 
     private(set) var state: DictationState = .idle {
         willSet {
-            Logger.shared.info("[State] \(stateDescription) -> \(DictationStateMachine.stateDescription(for: newValue)) (event: \(lastEvent ?? "unknown"))")
+            // Only log if state actually changes (not during observation reads)
+            guard state != newValue else { return }
+
+            #if DEBUG
+            let fromDesc = DictationStateMachine.stateDescription(for: state)
+            let toDesc = DictationStateMachine.stateDescription(for: newValue)
+            let event = lastEvent ?? "unknown"
+            Logger.shared.info("[State] \(fromDesc) -> \(toDesc) (event: \(event))")
+            #endif
         }
     }
 
